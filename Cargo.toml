@@ -1,0 +1,19 @@
+[package]
+name = "bevy_game"
+version = "0.1.0"
+edition = "2021"
+
+[profile.dev]
+opt-level = 0
+debug = true
+incremental = true
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = 3
+strip = true
+debug = false
+
+[dependencies]
+bevy = "0.15"
