@@ -1,6 +1,7 @@
 use std::panic;
 use backtrace::Backtrace;
 use std::fs;
+use bevy::prelude::{ButtonInput, KeyCode, Res};
 use chrono::Local;
 
 pub fn setup_panic_handler() {
@@ -27,4 +28,10 @@ pub fn setup_panic_handler() {
             eprintln!("Crash report saved to: {}", filename);
         }
     }));
+}
+
+pub fn trigger_panic(keys: Res<ButtonInput<KeyCode>>) {
+    if keys.just_pressed(KeyCode::KeyP) {
+        panic!("Manual panic triggered!");
+    }
 }

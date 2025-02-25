@@ -3,7 +3,7 @@ mod core;
 
 use std::panic;
 use bevy::prelude::*;
-use self::core::panic_handler::setup_panic_handler;
+use self::core::debug::panic_handler::setup_panic_handler;
 
 fn main() {
     setup_panic_handler();
