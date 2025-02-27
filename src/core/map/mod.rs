@@ -29,33 +29,32 @@ pub fn init(
     // Размеры плоскости
     let width = 8192.0;
     let height = 3616.0;
-    let subdivisions_x = 256;
-    let subdivisions_z = 256;
+    let subdivisions_x = 2048;
+    let subdivisions_z = 904;
 
+    // Загружаем карту высот (предполагается, что её разрешение совпадает с сеткой вершин)
     let heightmap = load_image_sync("common/map/heightmap.png").into_luma8();
 
-    let plane_mesh = generate_terrain_mesh(0, 0, width, height, subdivisions_x, subdivisions_z, &heightmap);
+    let terrain_mesh = generate_terrain_mesh(0.0, 0.0, width, height, subdivisions_x, subdivisions_z, &heightmap);
 
     commands.spawn((
-        Mesh3d::from(meshes.add(plane_mesh)),
+        Mesh3d::from(meshes.add(terrain_mesh)),
         MeshMaterial3d::from(materials.add(StandardMaterial {
             base_color: Color::srgb(0.3, 0.5, 0.3),
             ..Default::default()
         })),
-        Transform {
-            ..Default::default()
-        }
+        Transform::default(),
     ));
 }
 
 fn generate_terrain_mesh(
-    start_x: u32,
-    start_z: u32,
+    start_x: f32,
+    start_z: f32,
     width: f32,
     height: f32,
     subdivisions_x: u32,
     subdivisions_z: u32,
-    heightmap: &GrayImage
+    heightmap: &GrayImage,
 ) -> Mesh {
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
     let vert_count = ((subdivisions_x + 1) * (subdivisions_z + 1)) as usize;
@@ -66,15 +65,13 @@ fn generate_terrain_mesh(
     // Определяем шаг по каждой оси и начальную позицию (центрированная плоскость)
     let step_x = width / subdivisions_x as f32;
     let step_y = height / subdivisions_z as f32;
-    let origin_x = -width / 2.0;
-    let origin_y = -height / 2.0;
 
     // Генерируем вершины
     for y in 0..=subdivisions_z {
         for x in 0..=subdivisions_x {
-            let pos_x = origin_x + x as f32 * step_x;
+            let pos_x = start_x + x as f32 * step_x;
             let pos_y = 0.0;
-            let pos_z = origin_y + y as f32 * step_y;
+            let pos_z = start_z + y as f32 * step_y;
             positions.push([pos_x, pos_y, pos_z]);
             normals.push([0.0, 1.0, 0.0]); // нормаль вверх
             uvs.push([x as f32 / subdivisions_x as f32, y as f32 / subdivisions_z as f32]);
@@ -103,6 +100,7 @@ fn generate_terrain_mesh(
     mesh.insert_indices(Indices::U32(indices));
     mesh
 }
+
 
 fn load_image_sync(path: &str) -> image::DynamicImage {
     let img = ImageReader::open(Path::new(path))
