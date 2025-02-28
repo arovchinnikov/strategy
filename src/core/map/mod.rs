@@ -1,9 +1,15 @@
+mod camera;
+
+use std::cmp::min;
+use std::f32::consts::PI;
 use std::path::Path;
 use bevy::app::{App, Plugin, Startup};
 use bevy::asset::{Assets, RenderAssetUsages};
+use bevy::color::palettes::basic::WHITE;
+use bevy::math::vec3;
 use bevy::pbr::wireframe::{Wireframe};
 use bevy::pbr::StandardMaterial;
-use bevy::prelude::{Camera3d, Color, Commands, Mesh, Mesh3d, MeshMaterial3d, ResMut, Transform, Vec3};
+use bevy::prelude::{default, Color, Commands, DirectionalLight, Mesh, Mesh3d, MeshMaterial3d, Quat, ResMut, Transform, Vec3};
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use image::{GrayImage, ImageReader};
 
@@ -11,6 +17,8 @@ pub struct MapPlugin;
 
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
+        camera::build(app);
+        
         app.add_systems(Startup, init);
     }
 }
@@ -20,30 +28,59 @@ pub fn init(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Камера
-    commands.spawn((
-        Camera3d::default(),
-        Transform::from_xyz(-5000.0, 1024.0, 0.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
-
-    // Размеры плоскости
     let width = 8192.0;
-    let height = 3616.0;
-    let subdivisions_x = 2048;
-    let subdivisions_z = 904;
+    let height = 3072.0;
+    let chunk_width = 512.0;
+    let chunk_height = 512.0;
 
-    // Загружаем карту высот (предполагается, что её разрешение совпадает с сеткой вершин)
+    let num_chunks_x = (width / chunk_width) as u32;
+    let num_chunks_z = (height / chunk_height) as u32;
+
+    let subdivisions_x = 256;
+    let subdivisions_z = 256;
+
     let heightmap = load_image_sync("common/map/heightmap.png").into_luma8();
 
-    let terrain_mesh = generate_terrain_mesh(0.0, 0.0, width, height, subdivisions_x, subdivisions_z, &heightmap);
+    for z in 0..num_chunks_z {
+        for x in 0..num_chunks_x {
+            let start_x = x * chunk_width as u32;
+            let start_z = z * chunk_height as u32;
+
+            let plane_mesh = generate_terrain_mesh(
+                start_x as f32,
+                start_z as f32,
+                chunk_width,
+                chunk_height,
+                subdivisions_x,
+                subdivisions_z,
+                &heightmap,
+            );
+
+            commands.spawn((
+                Mesh3d::from(meshes.add(plane_mesh)),
+                MeshMaterial3d::from(materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.3, 0.5, 0.4),
+                    ..default()
+                })),
+                Transform {
+                    translation: Vec3::new(start_x as f32 * 0.5, 0.0, start_z as f32 * 0.5),
+                    scale: Vec3::new(0.5, 0.5, 0.5),
+                    ..default()
+                },
+                Wireframe
+            ));
+        }
+    }
 
     commands.spawn((
-        Mesh3d::from(meshes.add(terrain_mesh)),
-        MeshMaterial3d::from(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.3, 0.5, 0.3),
-            ..Default::default()
-        })),
-        Transform::default(),
+        DirectionalLight {
+            color: WHITE.into(),
+            illuminance: 4500.,
+            shadows_enabled: true,
+            ..default()
+        },
+        Transform::from_xyz(0.0, 2000.0, 0.0)
+            .with_rotation(Quat::from_axis_angle(Vec3::ONE, -PI / 6.)),
     ));
 }
 
@@ -69,11 +106,16 @@ fn generate_terrain_mesh(
     // Генерируем вершины
     for y in 0..=subdivisions_z {
         for x in 0..=subdivisions_x {
-            let pos_x = start_x + x as f32 * step_x;
-            let pos_y = 0.0;
-            let pos_z = start_z + y as f32 * step_y;
+            let pos_x = x as f32 * step_x;
+            let pos_z = y as f32 * step_y;
+
+            let pixel_x = min((start_x + pos_x) as u32, heightmap.width() - 1);
+            let pixel_z = min((start_z + pos_z) as u32, heightmap.height() - 1);
+
+            let pos_y = heightmap.get_pixel(pixel_x, pixel_z)[0] as f32 * 0.35;
+            
             positions.push([pos_x, pos_y, pos_z]);
-            normals.push([0.0, 1.0, 0.0]); // нормаль вверх
+            normals.push([0.0, 1.0, 0.0]);
             uvs.push([x as f32 / subdivisions_x as f32, y as f32 / subdivisions_z as f32]);
         }
     }
