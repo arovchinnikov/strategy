@@ -1,13 +1,10 @@
 mod camera;
 
-use std::cmp::min;
-use std::collections::HashMap;
 use std::f32::consts::PI;
 use std::path::Path;
 use bevy::app::{App, Plugin, Startup};
 use bevy::asset::{Assets, RenderAssetUsages};
 use bevy::color::palettes::basic::WHITE;
-use bevy::math::vec3;
 use bevy::pbr::wireframe::{Wireframe};
 use bevy::pbr::StandardMaterial;
 use bevy::prelude::{default, Color, Commands, DirectionalLight, Mesh, Mesh3d, MeshMaterial3d, Quat, ResMut, Transform, Vec3};
@@ -47,7 +44,7 @@ pub fn init(
             let start_x = x * chunk_width as u32;
             let start_z = z * chunk_height as u32;
 
-            let mut plane_mesh = generate_terrain_mesh(
+            let plane_mesh = generate_terrain_mesh(
                 start_x as f32,
                 start_z as f32,
                 chunk_width,
@@ -99,13 +96,12 @@ fn generate_terrain_mesh(
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
     let vert_count = ((subdivisions_x + 1) * (subdivisions_z + 1)) as usize;
     let mut positions = Vec::with_capacity(vert_count);
-    let mut normals = Vec::with_capacity(vert_count);
     let mut uvs = Vec::with_capacity(vert_count);
 
     let step_x = width / subdivisions_x as f32;
     let step_z = height / subdivisions_z as f32;
 
-    // Generate all vertices first
+    // Generate vertices
     for y in 0..=subdivisions_z {
         for x in 0..=subdivisions_x {
             let pos_x = x as f32 * step_x;
@@ -114,19 +110,17 @@ fn generate_terrain_mesh(
             let pixel_x = ((start_x + pos_x) as u32).min(heightmap.width() - 1);
             let pixel_z = ((start_z + pos_z) as u32).min(heightmap.height() - 1);
 
-            let pos_y = heightmap.get_pixel(pixel_x, pixel_z)[0] as f32 * 0.35;
+            let pos_y = calc_height(heightmap.get_pixel(pixel_x, pixel_z)[0] as f32);
 
             positions.push([pos_x, pos_y, pos_z]);
-            normals.push([0.0, 1.0, 0.0]);
             uvs.push([x as f32 / subdivisions_x as f32, y as f32 / subdivisions_z as f32]);
         }
     }
 
     let mut indices = Vec::new();
-    let flat_threshold = 0.1; // Adjust this value based on your needs
+    let flat_threshold = 0.3;
 
-    // Recursive function to process terrain blocks
-    // Recursive function to process terrain blocks with improved height sampling
+    // Recursive function to process blocks and generate indices
     fn process_block(
         x: u32,
         y: u32,
@@ -145,7 +139,6 @@ fn generate_terrain_mesh(
             return;
         }
 
-        // Проверяем все вершины в блоке, а не только углы
         let mut h_min = f32::INFINITY;
         let mut h_max = f32::NEG_INFINITY;
         for j in y..=y + block_size {
@@ -158,7 +151,6 @@ fn generate_terrain_mesh(
         let max_diff = h_max - h_min;
 
         if max_diff <= threshold {
-            // Если разница меньше порога, то считаем блок достаточно плоским и оптимизируем его
             let top_left = y * (sub_x + 1) + x;
             let top_right = y * (sub_x + 1) + x + block_size;
             let bottom_left = (y + block_size) * (sub_x + 1) + x;
@@ -166,20 +158,18 @@ fn generate_terrain_mesh(
 
             indices.extend(&[top_left, bottom_left, top_right, top_right, bottom_left, bottom_right]);
         } else if block_size > 1 {
-            // Иначе делим блок на 4 подблока
             let half = block_size / 2;
             process_block(x, y, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
             process_block(x + half, y, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
             process_block(x, y + half, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
             process_block(x + half, y + half, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
         } else {
-            // Если блок размером в 1 ячейку, то добавляем индексы для этой ячейки
             let i = y * (sub_x + 1) + x;
             indices.extend(&[i, i + sub_x + 1, i + 1, i + 1, i + sub_x + 1, i + sub_x + 2]);
         }
     }
 
-    // Helper function to get height at grid coordinates
+    // Helper function to get height from heightmap
     fn get_height(
         x: u32,
         y: u32,
@@ -199,10 +189,10 @@ fn generate_terrain_mesh(
         let pixel_x = ((start_x + pos_x) as u32).min(heightmap.width() - 1);
         let pixel_z = ((start_z + pos_z) as u32).min(heightmap.height() - 1);
 
-        heightmap.get_pixel(pixel_x, pixel_z)[0] as f32 * 0.35
+        calc_height(heightmap.get_pixel(pixel_x, pixel_z)[0] as f32)
     }
 
-    // Start processing with largest possible block size
+    // Generate indices using process_block
     let initial_block_size = subdivisions_x.min(subdivisions_z);
     process_block(
         0,
@@ -219,11 +209,59 @@ fn generate_terrain_mesh(
         flat_threshold,
     );
 
+    // Calculate vertex normals
+    let mut normals = vec![[0.0; 3]; positions.len()];
+    for triangle in indices.chunks_exact(3) {
+        let i0 = triangle[0] as usize;
+        let i1 = triangle[1] as usize;
+        let i2 = triangle[2] as usize;
+
+        let p0 = positions[i0];
+        let p1 = positions[i1];
+        let p2 = positions[i2];
+
+        // Calculate triangle normal
+        let edge1 = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+        let edge2 = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
+
+        let normal = [
+            edge1[1] * edge2[2] - edge1[2] * edge2[1],
+            edge1[2] * edge2[0] - edge1[0] * edge2[2],
+            edge1[0] * edge2[1] - edge1[1] * edge2[0],
+        ];
+
+        // Accumulate normals for all vertices of the triangle
+        for &i in &[i0, i1, i2] {
+            normals[i][0] += normal[0];
+            normals[i][1] += normal[1];
+            normals[i][2] += normal[2];
+        }
+    }
+
+    // Normalize all normals
+    for normal in &mut normals {
+        let length = (normal[0].powi(2) + normal[1].powi(2) + normal[2].powi(2)).sqrt();
+        if length > 0.0 {
+            normal[0] /= length;
+            normal[1] /= length;
+            normal[2] /= length;
+        }
+    }
+
+    // Build mesh
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh.insert_indices(Indices::U32(indices));
     mesh
+}
+
+fn calc_height(height: f32) -> f32 {
+    if height < 12.0 {
+        return 0.0;
+    }
+
+    height * 0.35
 }
 
 fn load_image_sync(path: &str) -> image::DynamicImage {
