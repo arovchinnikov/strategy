@@ -1,6 +1,7 @@
 mod camera;
 
 use std::cmp::min;
+use std::collections::HashMap;
 use std::f32::consts::PI;
 use std::path::Path;
 use bevy::app::{App, Plugin, Startup};
@@ -29,7 +30,7 @@ pub fn init(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let width = 8192.0;
-    let height = 3072.0;
+    let height = 4096.0;
     let chunk_width = 512.0;
     let chunk_height = 512.0;
 
@@ -46,7 +47,7 @@ pub fn init(
             let start_x = x * chunk_width as u32;
             let start_z = z * chunk_height as u32;
 
-            let plane_mesh = generate_terrain_mesh(
+            let mut plane_mesh = generate_terrain_mesh(
                 start_x as f32,
                 start_z as f32,
                 chunk_width,
@@ -71,6 +72,8 @@ pub fn init(
             ));
         }
     }
+
+    drop(heightmap);
 
     commands.spawn((
         DirectionalLight {
@@ -99,42 +102,122 @@ fn generate_terrain_mesh(
     let mut normals = Vec::with_capacity(vert_count);
     let mut uvs = Vec::with_capacity(vert_count);
 
-    // Определяем шаг по каждой оси и начальную позицию (центрированная плоскость)
     let step_x = width / subdivisions_x as f32;
-    let step_y = height / subdivisions_z as f32;
+    let step_z = height / subdivisions_z as f32;
 
-    // Генерируем вершины
+    // Generate all vertices first
     for y in 0..=subdivisions_z {
         for x in 0..=subdivisions_x {
             let pos_x = x as f32 * step_x;
-            let pos_z = y as f32 * step_y;
+            let pos_z = y as f32 * step_z;
 
-            let pixel_x = min((start_x + pos_x) as u32, heightmap.width() - 1);
-            let pixel_z = min((start_z + pos_z) as u32, heightmap.height() - 1);
+            let pixel_x = ((start_x + pos_x) as u32).min(heightmap.width() - 1);
+            let pixel_z = ((start_z + pos_z) as u32).min(heightmap.height() - 1);
 
             let pos_y = heightmap.get_pixel(pixel_x, pixel_z)[0] as f32 * 0.35;
-            
+
             positions.push([pos_x, pos_y, pos_z]);
             normals.push([0.0, 1.0, 0.0]);
             uvs.push([x as f32 / subdivisions_x as f32, y as f32 / subdivisions_z as f32]);
         }
     }
 
-    // Генерируем индексы для треугольников
     let mut indices = Vec::new();
-    for y in 0..subdivisions_z {
-        for x in 0..subdivisions_x {
-            let i = y * (subdivisions_x + 1) + x;
-            // Первый треугольник
-            indices.push(i);
-            indices.push(i + subdivisions_x + 1);
-            indices.push(i + 1);
-            // Второй треугольник
-            indices.push(i + 1);
-            indices.push(i + subdivisions_x + 1);
-            indices.push(i + subdivisions_x + 2);
+    let flat_threshold = 0.1; // Adjust this value based on your needs
+
+    // Recursive function to process terrain blocks
+    // Recursive function to process terrain blocks with improved height sampling
+    fn process_block(
+        x: u32,
+        y: u32,
+        block_size: u32,
+        sub_x: u32,
+        sub_z: u32,
+        width: f32,
+        height: f32,
+        start_x: f32,
+        start_z: f32,
+        heightmap: &GrayImage,
+        indices: &mut Vec<u32>,
+        threshold: f32,
+    ) {
+        if x + block_size > sub_x || y + block_size > sub_z {
+            return;
+        }
+
+        // Проверяем все вершины в блоке, а не только углы
+        let mut h_min = f32::INFINITY;
+        let mut h_max = f32::NEG_INFINITY;
+        for j in y..=y + block_size {
+            for i in x..=x + block_size {
+                let h = get_height(i, j, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+                h_min = h_min.min(h);
+                h_max = h_max.max(h);
+            }
+        }
+        let max_diff = h_max - h_min;
+
+        if max_diff <= threshold {
+            // Если разница меньше порога, то считаем блок достаточно плоским и оптимизируем его
+            let top_left = y * (sub_x + 1) + x;
+            let top_right = y * (sub_x + 1) + x + block_size;
+            let bottom_left = (y + block_size) * (sub_x + 1) + x;
+            let bottom_right = (y + block_size) * (sub_x + 1) + x + block_size;
+
+            indices.extend(&[top_left, bottom_left, top_right, top_right, bottom_left, bottom_right]);
+        } else if block_size > 1 {
+            // Иначе делим блок на 4 подблока
+            let half = block_size / 2;
+            process_block(x, y, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
+            process_block(x + half, y, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
+            process_block(x, y + half, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
+            process_block(x + half, y + half, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
+        } else {
+            // Если блок размером в 1 ячейку, то добавляем индексы для этой ячейки
+            let i = y * (sub_x + 1) + x;
+            indices.extend(&[i, i + sub_x + 1, i + 1, i + 1, i + sub_x + 1, i + sub_x + 2]);
         }
     }
+
+    // Helper function to get height at grid coordinates
+    fn get_height(
+        x: u32,
+        y: u32,
+        sub_x: u32,
+        sub_z: u32,
+        width: f32,
+        height: f32,
+        start_x: f32,
+        start_z: f32,
+        heightmap: &GrayImage,
+    ) -> f32 {
+        let step_x = width / sub_x as f32;
+        let step_z = height / sub_z as f32;
+        let pos_x = x as f32 * step_x;
+        let pos_z = y as f32 * step_z;
+
+        let pixel_x = ((start_x + pos_x) as u32).min(heightmap.width() - 1);
+        let pixel_z = ((start_z + pos_z) as u32).min(heightmap.height() - 1);
+
+        heightmap.get_pixel(pixel_x, pixel_z)[0] as f32 * 0.35
+    }
+
+    // Start processing with largest possible block size
+    let initial_block_size = subdivisions_x.min(subdivisions_z);
+    process_block(
+        0,
+        0,
+        initial_block_size,
+        subdivisions_x,
+        subdivisions_z,
+        width,
+        height,
+        start_x,
+        start_z,
+        heightmap,
+        &mut indices,
+        flat_threshold,
+    );
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
@@ -142,7 +225,6 @@ fn generate_terrain_mesh(
     mesh.insert_indices(Indices::U32(indices));
     mesh
 }
-
 
 fn load_image_sync(path: &str) -> image::DynamicImage {
     let img = ImageReader::open(Path::new(path))
