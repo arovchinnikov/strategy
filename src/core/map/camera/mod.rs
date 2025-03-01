@@ -19,8 +19,7 @@ pub fn build(app: &mut bevy::prelude::App) {
     app.add_systems(Startup, init);
     app.add_systems(Update, camera_movement);
 }
-
-pub fn init(
+fn init(
     mut commands: Commands
 ) {
     commands.spawn((

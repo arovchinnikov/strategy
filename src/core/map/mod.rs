@@ -1,13 +1,15 @@
 mod camera;
+mod sea;
 
+use std::collections::HashMap;
 use std::f32::consts::PI;
 use std::path::Path;
 use bevy::app::{App, Plugin, Startup};
 use bevy::asset::{Assets, RenderAssetUsages};
 use bevy::color::palettes::basic::WHITE;
-use bevy::pbr::wireframe::{Wireframe};
 use bevy::pbr::StandardMaterial;
-use bevy::prelude::{default, Color, Commands, DirectionalLight, Mesh, Mesh3d, MeshMaterial3d, Quat, ResMut, Transform, Vec3};
+use bevy::pbr::wireframe::Wireframe;
+use bevy::prelude::{default, Color, Commands, Component, DirectionalLight, Entity, Mesh, Mesh3d, MeshMaterial3d, Quat, Query, Res, ResMut, Transform, Vec3};
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use image::{GrayImage, ImageReader};
 
@@ -16,6 +18,7 @@ pub struct MapPlugin;
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
         camera::build(app);
+        sea::build(app);
         
         app.add_systems(Startup, init);
     }
@@ -28,8 +31,8 @@ pub fn init(
 ) {
     let width = 8192.0;
     let height = 4096.0;
-    let chunk_width = 512.0;
-    let chunk_height = 512.0;
+    let chunk_width = 256.0;
+    let chunk_height = 256.0;
 
     let num_chunks_x = (width / chunk_width) as u32;
     let num_chunks_z = (height / chunk_height) as u32;
@@ -54,23 +57,37 @@ pub fn init(
                 &heightmap,
             );
 
-            commands.spawn((
-                Mesh3d::from(meshes.add(plane_mesh)),
-                MeshMaterial3d::from(materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.3, 0.5, 0.4),
-                    ..default()
-                })),
-                Transform {
-                    translation: Vec3::new(start_x as f32 * 0.5, 0.0, start_z as f32 * 0.5),
-                    scale: Vec3::new(0.5, 0.5, 0.5),
-                    ..default()
-                },
-                Wireframe
-            ));
+            if x == 3 && z == 2 {
+                commands.spawn((
+                    Mesh3d::from(meshes.add(plane_mesh)),
+                    MeshMaterial3d::from(materials.add(StandardMaterial {
+                        base_color: Color::srgb(0.3, 0.5, 0.4),
+                        ..default()
+                    })),
+                    Transform {
+                        translation: Vec3::new(start_x as f32 * 0.5, 0.0, start_z as f32 * 0.5),
+                        scale: Vec3::new(0.5, 0.5, 0.5),
+                        ..default()
+                    },
+                    Wireframe
+                ));
+            } else {
+                commands.spawn((
+                    Mesh3d::from(meshes.add(plane_mesh)),
+                    MeshMaterial3d::from(materials.add(StandardMaterial {
+                        base_color: Color::srgb(0.3, 0.5, 0.4),
+                        perceptual_roughness: 1.0,
+                        ..default()
+                    })),
+                    Transform {
+                        translation: Vec3::new(start_x as f32 * 0.5, 0.0, start_z as f32 * 0.5),
+                        scale: Vec3::new(0.5, 0.5, 0.5),
+                        ..default()
+                    },
+                ));
+            }
         }
     }
-
-    drop(heightmap);
 
     commands.spawn((
         DirectionalLight {
@@ -101,7 +118,6 @@ fn generate_terrain_mesh(
     let step_x = width / subdivisions_x as f32;
     let step_z = height / subdivisions_z as f32;
 
-    // Generate vertices
     for y in 0..=subdivisions_z {
         for x in 0..=subdivisions_x {
             let pos_x = x as f32 * step_x;
@@ -118,9 +134,8 @@ fn generate_terrain_mesh(
     }
 
     let mut indices = Vec::new();
-    let flat_threshold = 0.3;
+    let flat_threshold = 0.1;
 
-    // Recursive function to process blocks and generate indices
     fn process_block(
         x: u32,
         y: u32,
@@ -209,43 +224,34 @@ fn generate_terrain_mesh(
         flat_threshold,
     );
 
-    // Calculate vertex normals
     let mut normals = vec![[0.0; 3]; positions.len()];
-    for triangle in indices.chunks_exact(3) {
-        let i0 = triangle[0] as usize;
-        let i1 = triangle[1] as usize;
-        let i2 = triangle[2] as usize;
 
-        let p0 = positions[i0];
-        let p1 = positions[i1];
-        let p2 = positions[i2];
+    for i in 0..positions.len() {
+        let local_x = positions[i][0];
+        let local_z = positions[i][2];
 
-        // Calculate triangle normal
-        let edge1 = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
-        let edge2 = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
+        // Глобальные координаты вершины в карте высот
+        let global_x = start_x + local_x;
+        let global_z = start_z + local_z;
 
-        let normal = [
-            edge1[1] * edge2[2] - edge1[2] * edge2[1],
-            edge1[2] * edge2[0] - edge1[0] * edge2[2],
-            edge1[0] * edge2[1] - edge1[1] * edge2[0],
-        ];
+        // Получаем высоты для соседних точек
+        let left_x = (global_x - 1.0).max(0.0);
+        let right_x = (global_x + 1.0).min(heightmap.width() as f32 - 1.0);
+        let down_z = (global_z - 1.0).max(0.0);
+        let up_z = (global_z + 1.0).min(heightmap.height() as f32 - 1.0);
 
-        // Accumulate normals for all vertices of the triangle
-        for &i in &[i0, i1, i2] {
-            normals[i][0] += normal[0];
-            normals[i][1] += normal[1];
-            normals[i][2] += normal[2];
-        }
-    }
+        // Вычисляем градиенты по X и Z
+        let h_left = get_height_global(left_x, global_z, heightmap);
+        let h_right = get_height_global(right_x, global_z, heightmap);
+        let delta_x = h_right - h_left;
 
-    // Normalize all normals
-    for normal in &mut normals {
-        let length = (normal[0].powi(2) + normal[1].powi(2) + normal[2].powi(2)).sqrt();
-        if length > 0.0 {
-            normal[0] /= length;
-            normal[1] /= length;
-            normal[2] /= length;
-        }
+        let h_down = get_height_global(global_x, down_z, heightmap);
+        let h_up = get_height_global(global_x, up_z, heightmap);
+        let delta_z = h_up - h_down;
+
+        // Рассчитываем нормаль по градиентам
+        let normal = Vec3::new(-delta_x, 2.0, -delta_z).normalize();
+        normals[i] = [normal.x, normal.y, normal.z];
     }
 
     // Build mesh
@@ -261,7 +267,19 @@ fn calc_height(height: f32) -> f32 {
         return 0.0;
     }
 
-    height * 0.35
+    if height < 17.00 {
+        return height * 0.7
+    }
+
+    let under_sea_height = 15.0 * 0.7;
+
+    under_sea_height + (height-15.0) * 0.3
+}
+
+fn get_height_global(x: f32, z: f32, heightmap: &GrayImage) -> f32 {
+    let px = x.min(heightmap.width() as f32 - 1.0).max(0.0) as u32;
+    let pz = z.min(heightmap.height() as f32 - 1.0).max(0.0) as u32;
+    calc_height(heightmap.get_pixel(px, pz)[0] as f32)
 }
 
 fn load_image_sync(path: &str) -> image::DynamicImage {
