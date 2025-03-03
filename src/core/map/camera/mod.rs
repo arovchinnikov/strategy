@@ -1,6 +1,6 @@
 use bevy::app::{Startup, Update};
 use bevy::math::{vec3, Vec3};
-use bevy::prelude::{ButtonInput, Camera3d, Commands, Component, KeyCode, Mesh, Query, Res, ResMut, Time, Transform, Vec2};
+use bevy::prelude::{ButtonInput, Camera3d, Commands, Component, KeyCode, Query, Res, Time, Transform};
 
 #[derive(Component)]
 struct CameraController {
@@ -10,7 +10,7 @@ struct CameraController {
 impl Default for CameraController {
     fn default() -> Self {
         Self {
-            speed: 140.0,
+            speed: 440.0,
         }
     }
 }
@@ -19,12 +19,11 @@ pub fn build(app: &mut bevy::prelude::App) {
     app.add_systems(Startup, init);
     app.add_systems(Update, camera_movement);
 }
-fn init(
-    mut commands: Commands
-) {
+
+fn init(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(1100.0, 180.0, 700.0).looking_at(vec3(1100.0, 0.0, 650.0), Vec3::Y),
+        Transform::from_xyz(1100.0, 340.0, 720.0).looking_at(vec3(1100.0, 0.0, 600.0), Vec3::Y),
         CameraController::default(),
     ));
 }

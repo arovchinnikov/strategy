@@ -1,17 +1,15 @@
 mod camera;
 mod sea;
 
-use std::collections::HashMap;
-use std::f32::consts::PI;
-use std::path::Path;
 use bevy::app::{App, Plugin, Startup};
 use bevy::asset::{Assets, RenderAssetUsages};
 use bevy::color::palettes::basic::WHITE;
-use bevy::pbr::StandardMaterial;
-use bevy::pbr::wireframe::Wireframe;
-use bevy::prelude::{default, Color, Commands, Component, DirectionalLight, Entity, Mesh, Mesh3d, MeshMaterial3d, Quat, Query, Res, ResMut, Transform, Vec3};
+use bevy::pbr::{DirectionalLightShadowMap, StandardMaterial};
+use bevy::prelude::{default, Color, Commands, DirectionalLight, Mesh, Mesh3d, MeshMaterial3d, Quat, ResMut, Transform, Vec3, Visibility};
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use image::{GrayImage, ImageReader};
+use std::f32::consts::PI;
+use std::path::Path;
 
 pub struct MapPlugin;
 
@@ -28,6 +26,7 @@ pub fn init(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut shadow_settings: ResMut<DirectionalLightShadowMap>,
 ) {
     let width = 8192.0;
     let height = 4096.0;
@@ -57,47 +56,34 @@ pub fn init(
                 &heightmap,
             );
 
-            if x == 3 && z == 2 {
-                commands.spawn((
-                    Mesh3d::from(meshes.add(plane_mesh)),
-                    MeshMaterial3d::from(materials.add(StandardMaterial {
-                        base_color: Color::srgb(0.3, 0.5, 0.4),
-                        ..default()
-                    })),
-                    Transform {
-                        translation: Vec3::new(start_x as f32 * 0.5, 0.0, start_z as f32 * 0.5),
-                        scale: Vec3::new(0.5, 0.5, 0.5),
-                        ..default()
-                    },
-                    Wireframe
-                ));
-            } else {
-                commands.spawn((
-                    Mesh3d::from(meshes.add(plane_mesh)),
-                    MeshMaterial3d::from(materials.add(StandardMaterial {
-                        base_color: Color::srgb(0.3, 0.5, 0.4),
-                        perceptual_roughness: 1.0,
-                        ..default()
-                    })),
-                    Transform {
-                        translation: Vec3::new(start_x as f32 * 0.5, 0.0, start_z as f32 * 0.5),
-                        scale: Vec3::new(0.5, 0.5, 0.5),
-                        ..default()
-                    },
-                ));
-            }
+            commands.spawn((
+                Mesh3d::from(meshes.add(plane_mesh)),
+                MeshMaterial3d::from(materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.3, 0.5, 0.4),
+                    perceptual_roughness: 1.0,
+                    ..default()
+                })),
+                Visibility::default(),
+                Transform {
+                    translation: Vec3::new(start_x as f32, 0.0, start_z as f32),
+                    scale: Vec3::new(1.0, 1.0, 1.0),
+                    ..default()
+                }
+            ));
         }
     }
+
+    shadow_settings.size = 4096;
 
     commands.spawn((
         DirectionalLight {
             color: WHITE.into(),
             illuminance: 4500.,
             shadows_enabled: true,
+            shadow_depth_bias: 0.002,
             ..default()
         },
-        Transform::from_xyz(0.0, 2000.0, 0.0)
-            .with_rotation(Quat::from_axis_angle(Vec3::ONE, -PI / 6.)),
+        Transform::from_xyz(0.0, 2000.0, 0.0).with_rotation(Quat::from_axis_angle(Vec3::ONE, -PI / 6.))
     ));
 }
 
@@ -134,80 +120,8 @@ fn generate_terrain_mesh(
     }
 
     let mut indices = Vec::new();
-    let flat_threshold = 0.1;
+    let flat_threshold = 0.0;
 
-    fn process_block(
-        x: u32,
-        y: u32,
-        block_size: u32,
-        sub_x: u32,
-        sub_z: u32,
-        width: f32,
-        height: f32,
-        start_x: f32,
-        start_z: f32,
-        heightmap: &GrayImage,
-        indices: &mut Vec<u32>,
-        threshold: f32,
-    ) {
-        if x + block_size > sub_x || y + block_size > sub_z {
-            return;
-        }
-
-        let mut h_min = f32::INFINITY;
-        let mut h_max = f32::NEG_INFINITY;
-        for j in y..=y + block_size {
-            for i in x..=x + block_size {
-                let h = get_height(i, j, sub_x, sub_z, width, height, start_x, start_z, heightmap);
-                h_min = h_min.min(h);
-                h_max = h_max.max(h);
-            }
-        }
-        let max_diff = h_max - h_min;
-
-        if max_diff <= threshold {
-            let top_left = y * (sub_x + 1) + x;
-            let top_right = y * (sub_x + 1) + x + block_size;
-            let bottom_left = (y + block_size) * (sub_x + 1) + x;
-            let bottom_right = (y + block_size) * (sub_x + 1) + x + block_size;
-
-            indices.extend(&[top_left, bottom_left, top_right, top_right, bottom_left, bottom_right]);
-        } else if block_size > 1 {
-            let half = block_size / 2;
-            process_block(x, y, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
-            process_block(x + half, y, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
-            process_block(x, y + half, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
-            process_block(x + half, y + half, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
-        } else {
-            let i = y * (sub_x + 1) + x;
-            indices.extend(&[i, i + sub_x + 1, i + 1, i + 1, i + sub_x + 1, i + sub_x + 2]);
-        }
-    }
-
-    // Helper function to get height from heightmap
-    fn get_height(
-        x: u32,
-        y: u32,
-        sub_x: u32,
-        sub_z: u32,
-        width: f32,
-        height: f32,
-        start_x: f32,
-        start_z: f32,
-        heightmap: &GrayImage,
-    ) -> f32 {
-        let step_x = width / sub_x as f32;
-        let step_z = height / sub_z as f32;
-        let pos_x = x as f32 * step_x;
-        let pos_z = y as f32 * step_z;
-
-        let pixel_x = ((start_x + pos_x) as u32).min(heightmap.width() - 1);
-        let pixel_z = ((start_z + pos_z) as u32).min(heightmap.height() - 1);
-
-        calc_height(heightmap.get_pixel(pixel_x, pixel_z)[0] as f32)
-    }
-
-    // Generate indices using process_block
     let initial_block_size = subdivisions_x.min(subdivisions_z);
     process_block(
         0,
@@ -230,17 +144,14 @@ fn generate_terrain_mesh(
         let local_x = positions[i][0];
         let local_z = positions[i][2];
 
-        // Глобальные координаты вершины в карте высот
         let global_x = start_x + local_x;
         let global_z = start_z + local_z;
 
-        // Получаем высоты для соседних точек
         let left_x = (global_x - 1.0).max(0.0);
         let right_x = (global_x + 1.0).min(heightmap.width() as f32 - 1.0);
         let down_z = (global_z - 1.0).max(0.0);
         let up_z = (global_z + 1.0).min(heightmap.height() as f32 - 1.0);
 
-        // Вычисляем градиенты по X и Z
         let h_left = get_height_global(left_x, global_z, heightmap);
         let h_right = get_height_global(right_x, global_z, heightmap);
         let delta_x = h_right - h_left;
@@ -249,12 +160,10 @@ fn generate_terrain_mesh(
         let h_up = get_height_global(global_x, up_z, heightmap);
         let delta_z = h_up - h_down;
 
-        // Рассчитываем нормаль по градиентам
         let normal = Vec3::new(-delta_x, 2.0, -delta_z).normalize();
         normals[i] = [normal.x, normal.y, normal.z];
     }
 
-    // Build mesh
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
@@ -262,18 +171,206 @@ fn generate_terrain_mesh(
     mesh
 }
 
+fn process_block(
+    x: u32,
+    y: u32,
+    block_size: u32,
+    sub_x: u32,
+    sub_z: u32,
+    width: f32,
+    height: f32,
+    start_x: f32,
+    start_z: f32,
+    heightmap: &GrayImage,
+    indices: &mut Vec<u32>,
+    threshold: f32,
+) {
+    if x + block_size > sub_x || y + block_size > sub_z {
+        return;
+    }
+
+    let mut h_min = f32::INFINITY;
+    let mut h_max = f32::NEG_INFINITY;
+    for j in y..=y + block_size {
+        for i in x..=x + block_size {
+            let h = get_height(i, j, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+            h_min = h_min.min(h);
+            h_max = h_max.max(h);
+        }
+    }
+    let max_diff = h_max - h_min;
+
+    if max_diff <= threshold {
+        let has_steep_edge = check_edges(
+            x, y, block_size,
+            sub_x, sub_z,
+            width, height,
+            start_x, start_z,
+            heightmap,
+            threshold,
+        );
+
+        if !has_steep_edge {
+            let top_left = y * (sub_x + 1) + x;
+            let top_right = y * (sub_x + 1) + x + block_size;
+            let bottom_left = (y + block_size) * (sub_x + 1) + x;
+            let bottom_right = (y + block_size) * (sub_x + 1) + x + block_size;
+            indices.extend(&[top_left, bottom_left, top_right, top_right, bottom_left, bottom_right]);
+        } else {
+            divide_block(x, y, block_size, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
+        }
+    } else {
+        divide_block(x, y, block_size, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
+    }
+}
+
+fn get_height(
+    x: u32,
+    y: u32,
+    sub_x: u32,
+    sub_z: u32,
+    width: f32,
+    height: f32,
+    start_x: f32,
+    start_z: f32,
+    heightmap: &GrayImage,
+) -> f32 {
+    let step_x = width / sub_x as f32;
+    let step_z = height / sub_z as f32;
+    let pos_x = x as f32 * step_x;
+    let pos_z = y as f32 * step_z;
+
+    let pixel_x = ((start_x + pos_x) as u32).min(heightmap.width() - 1);
+    let pixel_z = ((start_z + pos_z) as u32).min(heightmap.height() - 1);
+
+    calc_height(heightmap.get_pixel(pixel_x, pixel_z)[0] as f32)
+}
+
+fn divide_block(
+    x: u32,
+    y: u32,
+    block_size: u32,
+    sub_x: u32,
+    sub_z: u32,
+    width: f32,
+    height: f32,
+    start_x: f32,
+    start_z: f32,
+    heightmap: &GrayImage,
+    indices: &mut Vec<u32>,
+    threshold: f32,
+) {
+    if block_size > 1 {
+        let half = block_size / 2;
+        process_block(x, y, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
+        process_block(x + half, y, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
+        process_block(x, y + half, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
+        process_block(x + half, y + half, half, sub_x, sub_z, width, height, start_x, start_z, heightmap, indices, threshold);
+    } else {
+        let i = y * (sub_x + 1) + x;
+        indices.extend(&[i, i + sub_x + 1, i + 1, i + 1, i + sub_x + 1, i + sub_x + 2]);
+    }
+}
+
+fn check_edges(
+    block_x: u32,
+    block_y: u32,
+    block_size: u32,
+    sub_x: u32,
+    sub_z: u32,
+    width: f32,
+    height: f32,
+    start_x: f32,
+    start_z: f32,
+    heightmap: &GrayImage,
+    threshold: f32,
+) -> bool {
+    // Edges
+    if block_x > 0 {
+        for z in block_y..=block_y + block_size {
+            let h_current = get_height(block_x, z, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+            let h_neighbor = get_height(block_x - 1, z, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+            if (h_current - h_neighbor).abs() > threshold {
+                return true;
+            }
+        }
+    }
+    if block_x + block_size < sub_x {
+        for z in block_y..=block_y + block_size {
+            let h_current = get_height(block_x + block_size, z, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+            let h_neighbor = get_height(block_x + block_size + 1, z, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+            if (h_current - h_neighbor).abs() > threshold {
+                return true;
+            }
+        }
+    }
+    if block_y > 0 {
+        for x in block_x..=block_x + block_size {
+            let h_current = get_height(x, block_y, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+            let h_neighbor = get_height(x, block_y - 1, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+            if (h_current - h_neighbor).abs() > threshold {
+                return true;
+            }
+        }
+    }
+    if block_y + block_size < sub_z {
+        for x in block_x..=block_x + block_size {
+            let h_current = get_height(x, block_y + block_size, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+            let h_neighbor = get_height(x, block_y + block_size + 1, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+            if (h_current - h_neighbor).abs() > threshold {
+                return true;
+            }
+        }
+    }
+    // Corners
+    if block_x > 0 && block_y > 0 {
+        let h_current = get_height(block_x, block_y, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+        let h_neighbor = get_height(block_x - 1, block_y - 1, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+        if (h_current - h_neighbor).abs() > threshold {
+            return true;
+        }
+    }
+    if block_x + block_size < sub_x && block_y > 0 {
+        let x = block_x + block_size;
+        let h_current = get_height(x, block_y, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+        let h_neighbor = get_height(x + 1, block_y - 1, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+        if (h_current - h_neighbor).abs() > threshold {
+            return true;
+        }
+    }
+    if block_x > 0 && block_y + block_size < sub_z {
+        let y = block_y + block_size;
+        let h_current = get_height(block_x, y, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+        let h_neighbor = get_height(block_x - 1, y + 1, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+        if (h_current - h_neighbor).abs() > threshold {
+            return true;
+        }
+    }
+    if block_x + block_size < sub_x && block_y + block_size < sub_z {
+        let x = block_x + block_size;
+        let y = block_y + block_size;
+        let h_current = get_height(x, y, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+        let h_neighbor = get_height(x + 1, y + 1, sub_x, sub_z, width, height, start_x, start_z, heightmap);
+        if (h_current - h_neighbor).abs() > threshold {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn calc_height(height: f32) -> f32 {
-    if height < 12.0 {
+    if height < 8.0 {
         return 0.0;
     }
 
-    if height < 17.00 {
-        return height * 0.7
+    let sea_level_height = 16.0;
+
+    if height <= sea_level_height {
+        return height * 0.45
     }
 
-    let under_sea_height = 15.0 * 0.7;
-
-    under_sea_height + (height-15.0) * 0.3
+    (sea_level_height * 0.45) + (height-sea_level_height) * 0.3
 }
 
 fn get_height_global(x: f32, z: f32, heightmap: &GrayImage) -> f32 {

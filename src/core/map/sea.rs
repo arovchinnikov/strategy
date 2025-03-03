@@ -27,7 +27,7 @@ pub fn init(
             ..default()
         })),
         Transform {
-            translation: Vec3::new(0.0, 5.5, 0.0),
+            translation: Vec3::new(4096.0, 7.0, 2048.0),
             scale: Vec3::new(1.0, 1.0, 1.0),
             ..default()
         },
