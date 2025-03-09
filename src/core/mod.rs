@@ -22,12 +22,12 @@ pub fn init(app: &mut bevy::prelude::App) {
 }
 
 fn setup(asset_server: Res<AssetServer>, mut commands: Commands) {
-    let music_handle = asset_server.load("sound/music/carved-in-stone.ogg");
+    let music_handle = asset_server.load("sound/music/lettre-a-elise.ogg");
     commands.spawn((
         AudioPlayer::new(music_handle),
         PlaybackSettings {
             mode: bevy::audio::PlaybackMode::Loop,
-            volume: bevy::audio::Volume::new(0.5),
+            volume: bevy::audio::Volume::new(0.2),
             ..default()
         },
     ));
