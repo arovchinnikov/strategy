@@ -7,7 +7,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use crate::core::map::generator::{generate_terrain_mesh, TerrainMeshData};
 use bevy::app::{App, Plugin, Startup};
-use bevy::asset::{Assets, RenderAssetUsages};
+use bevy::asset::{AssetId, Assets, RenderAssetUsages};
 use bevy::pbr::StandardMaterial;
 use bevy::prelude::{default, BuildChildren, Color, Commands, Component, GlobalTransform, Mesh, Mesh3d, MeshMaterial3d, Parent, ResMut, Transform, Vec3, Visibility};
 use image::{GrayImage, ImageReader};
@@ -38,6 +38,7 @@ struct WorldMap {
 #[derive(Component)]
 struct WorldChunk {
     id: u32,
+    mesh_id: AssetId<Mesh>,
     loaded: bool
 }
 
@@ -49,7 +50,7 @@ pub fn init(
     let width = 8192;
     let height = 4096;
     let chunk_size = 256;
-    let pixels_per_vertex = 8;
+    let pixels_per_vertex = 1;
 
     let num_chunks_x = width / chunk_size;
     let num_chunks_z = height / chunk_size;
@@ -85,25 +86,26 @@ pub fn init(
                 &heightmap,
             );
 
-            let mut mesh1 = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+            let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
 
-            mesh1.insert_attribute(Mesh::ATTRIBUTE_POSITION, terrain_mesh.positions.clone());
-            mesh1.insert_attribute(Mesh::ATTRIBUTE_NORMAL, terrain_mesh.normals.clone());
-            mesh1.insert_attribute(Mesh::ATTRIBUTE_UV_0, terrain_mesh.uvs.clone());
-            mesh1.insert_indices(Indices::U32(terrain_mesh.indices.clone()));
+            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, terrain_mesh.positions.clone());
+            mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, terrain_mesh.normals.clone());
+            mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, terrain_mesh.uvs.clone());
+            mesh.insert_indices(Indices::U32(terrain_mesh.indices.clone()));
 
             let filepath = format!("./tmp/cache/chunk_{}.mesh", chunk_id);
 
             save_to_bin(&terrain_mesh, filepath.as_str()).unwrap();
 
-            let meshh = meshes.add(mesh1);
-            let mesh_id = meshh.id().clone();
+            let mesh_asset = meshes.add(mesh);
+            let mesh_id = mesh_asset.id().clone();
 
             let terrain_chunk = commands.spawn((
-                Mesh3d::from(meshh),
+                Mesh3d::from(mesh_asset),
                 WorldChunk {
                     id: chunk_id,
-                    loaded: true,
+                    mesh_id: mesh_id,
+                    loaded: false,
                 },
                 MeshMaterial3d::from(materials.add(StandardMaterial {
                     base_color: Color::srgb(0.3, 0.5, 0.4),
@@ -118,32 +120,13 @@ pub fn init(
                 RenderLayers::layer(1)
             )).id();
 
-            meshes.remove(mesh_id.clone());
-
-            let new_mesh = load_from_bin(filepath.as_str()).unwrap();
-
-            let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
-
-            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, new_mesh.positions);
-            mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, new_mesh.normals);
-            mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, new_mesh.uvs);
-            mesh.insert_indices(Indices::U32(new_mesh.indices));
-
-            meshes.insert(mesh_id, mesh);
+            meshes.remove(mesh_id);
 
             commands.entity(parent_entity).insert_children(chunk_id as usize, &[terrain_chunk]);
 
             chunk_id += 1;
         }
     }
-}
-
-fn load_from_bin(path: &str) -> std::io::Result<TerrainMeshData> {
-    let mut file = File::open(path)?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
-    let mesh: TerrainMeshData = bincode::deserialize(&buffer).unwrap();
-    Ok(mesh)
 }
 
 fn save_to_bin(mesh: &TerrainMeshData, path: &str) -> std::io::Result<()> {

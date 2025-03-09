@@ -4,7 +4,7 @@ use std::path::Path;
 use bevy::asset::RenderAssetUsages;
 use crate::core::map::camera::CameraCorners;
 use crate::core::map::{WorldChunk, WorldMap};
-use bevy::prelude::{Assets, Commands, Entity, Mesh, Mesh3d, Query, Res, Transform, With};
+use bevy::prelude::{Assets, Commands, Entity, Mesh, Mesh3d, Query, Res, ResMut, Transform, With};
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy::render::view::RenderLayers;
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,7 @@ pub fn view_world(
     camera_corners: Query<&CameraCorners>,
     map: Query<&WorldMap>,
     mut chunks: Query<(Entity, &Transform, &mut RenderLayers, &mut Mesh3d, &mut WorldChunk)>,
-    mut commands: Commands
+    mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let corners =  camera_corners.single();
     let map =  map.single();
@@ -40,12 +40,31 @@ pub fn view_world(
             loaded = in_view(corners, pos_x, pos_z, map.chunk_size as f32, additional_space + 2.0 * map.chunk_size as f32);
         }
         
-        let filename = format!("./tmp/cache/chunk_{}.mesh", chunk.id);
+        let filepath = format!("./tmp/cache/chunk_{}.mesh", chunk.id);
 
         if chunk.loaded && !loaded {
+            chunk.loaded = false;
+            meshes.remove(chunk.mesh_id);
+            println!("chunk unloaded");
+            continue;
         }
 
-        if !chunk.loaded && loaded {}
+        if !chunk.loaded && loaded {
+            chunk.loaded = true;
+
+            let mesh_data = load_from_bin(filepath.as_str()).unwrap();
+
+            let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+
+            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, mesh_data.positions);
+            mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, mesh_data.normals);
+            mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, mesh_data.uvs);
+            mesh.insert_indices(Indices::U32(mesh_data.indices));
+
+            meshes.insert(chunk.mesh_id, mesh);
+
+            println!("chunk_loaded");
+        }
     }
 }
 
@@ -55,16 +74,6 @@ fn load_from_bin(path: &str) -> std::io::Result<TerrainMeshData> {
     file.read_to_end(&mut buffer)?;
     let mesh: TerrainMeshData = bincode::deserialize(&buffer).unwrap();
     Ok(mesh)
-}
-
-fn from_terrain_mesh_data(mesh_data: TerrainMeshData) -> Mesh {
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
-
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, mesh_data.positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, mesh_data.normals);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, mesh_data.uvs);
-    mesh.insert_indices(Indices::U32(mesh_data.indices));
-    mesh
 }
 
 fn in_view(

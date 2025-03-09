@@ -70,8 +70,6 @@ fn update_camera_corners(
         }
     }
 
-    println!("{:?}", world_corners);
-
     corners.min_x = world_corners[0].x;
     corners.min_z = world_corners[0].z;
     corners.max_x = world_corners[1].x;
