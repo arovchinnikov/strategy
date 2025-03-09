@@ -23,7 +23,7 @@ pub fn build(app: &mut bevy::prelude::App) {
 fn init(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(1100.0, 340.0, 720.0).looking_at(vec3(1100.0, 0.0, 600.0), Vec3::Y),
+        Transform::from_xyz(1100.0, 180.0, 720.0).looking_at(vec3(1100.0, 0.0, 600.0), Vec3::Y),
         CameraController::default(),
     ));
 }

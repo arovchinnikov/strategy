@@ -1,14 +1,13 @@
 mod camera;
 mod sea;
+mod light;
 
 use bevy::app::{App, Plugin, Startup};
 use bevy::asset::{Assets, RenderAssetUsages};
-use bevy::color::palettes::basic::WHITE;
-use bevy::pbr::{DirectionalLightShadowMap, StandardMaterial};
-use bevy::prelude::{default, Color, Commands, DirectionalLight, Mesh, Mesh3d, MeshMaterial3d, Quat, ResMut, Transform, Vec3, Visibility};
+use bevy::pbr::StandardMaterial;
+use bevy::prelude::{default, Color, Commands, Mesh, Mesh3d, MeshMaterial3d, ResMut, Transform, Vec3, Visibility};
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use image::{GrayImage, ImageReader};
-use std::f32::consts::PI;
 use std::path::Path;
 
 pub struct MapPlugin;
@@ -17,6 +16,7 @@ impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
         camera::build(app);
         sea::build(app);
+        light::build(app);
         
         app.add_systems(Startup, init);
     }
@@ -26,7 +26,6 @@ pub fn init(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut shadow_settings: ResMut<DirectionalLightShadowMap>,
 ) {
     let width = 8192.0;
     let height = 4096.0;
@@ -72,19 +71,6 @@ pub fn init(
             ));
         }
     }
-
-    shadow_settings.size = 4096;
-
-    commands.spawn((
-        DirectionalLight {
-            color: WHITE.into(),
-            illuminance: 4500.,
-            shadows_enabled: true,
-            shadow_depth_bias: 0.002,
-            ..default()
-        },
-        Transform::from_xyz(0.0, 2000.0, 0.0).with_rotation(Quat::from_axis_angle(Vec3::ONE, -PI / 6.))
-    ));
 }
 
 fn generate_terrain_mesh(
@@ -360,17 +346,17 @@ fn check_edges(
 }
 
 fn calc_height(height: f32) -> f32 {
-    if height < 8.0 {
+    if height < 6.0 {
         return 0.0;
     }
 
     let sea_level_height = 16.0;
 
     if height <= sea_level_height {
-        return height * 0.45
+        return height * 0.4
     }
 
-    (sea_level_height * 0.45) + (height-sea_level_height) * 0.3
+    (sea_level_height * 0.4) + (height-sea_level_height) * 0.35
 }
 
 fn get_height_global(x: f32, z: f32, heightmap: &GrayImage) -> f32 {
