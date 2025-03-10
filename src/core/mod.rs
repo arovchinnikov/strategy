@@ -8,6 +8,7 @@ use debug::panic_handler::trigger_panic;
 
 mod map;
 pub(crate) mod debug;
+mod async_tasks;
 
 pub fn init(app: &mut bevy::prelude::App) {
     app.add_plugins(DefaultPlugins.set(AssetPlugin {
@@ -17,6 +18,8 @@ pub fn init(app: &mut bevy::prelude::App) {
     app.add_plugins(MapPlugin);
     app.add_plugins(DebugPlugin);
 
+    async_tasks::build(app);
+    
     app.add_systems(Update, trigger_panic);
     app.add_systems(Startup, setup);
 }

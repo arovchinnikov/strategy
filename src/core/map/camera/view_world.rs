@@ -1,25 +1,27 @@
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::Path;
-use bevy::asset::RenderAssetUsages;
+use crate::core::async_tasks::{BackgroundTaskResult, BackgroundTaskSystem, ChunkData};
 use crate::core::map::camera::CameraCorners;
+use crate::core::map::generator::TerrainMeshData;
 use crate::core::map::{WorldChunk, WorldMap};
-use bevy::prelude::{Assets, Commands, Entity, Mesh, Mesh3d, Query, Res, ResMut, Transform, With};
+use bevy::asset::RenderAssetUsages;
+use bevy::prelude::{Assets, Mesh, Query, ResMut, Transform};
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy::render::view::RenderLayers;
-use serde::{Deserialize, Serialize};
-use crate::core::map::generator::TerrainMeshData;
+use bevy::tasks::AsyncComputeTaskPool;
+use std::fs::File;
+use std::io::Read;
+use std::time::Instant;
 
 pub fn view_world(
     camera_corners: Query<&CameraCorners>,
     map: Query<&WorldMap>,
-    mut chunks: Query<(Entity, &Transform, &mut RenderLayers, &mut Mesh3d, &mut WorldChunk)>,
+    mut chunks: Query<(&Transform, &mut RenderLayers, &mut WorldChunk)>,
     mut meshes: ResMut<Assets<Mesh>>,
+    task_system: ResMut<BackgroundTaskSystem>,
 ) {
     let corners =  camera_corners.single();
     let map =  map.single();
 
-    for (entity, transform, mut render_layers, mesh, mut chunk) in chunks.iter_mut() {
+    for (transform, mut render_layers, mut chunk) in chunks.iter_mut() {
         let pos_x = transform.translation.x;
         let pos_z = transform.translation.z;
 
@@ -37,10 +39,11 @@ pub fn view_world(
         }
 
         if loaded == false {
-            loaded = in_view(corners, pos_x, pos_z, map.chunk_size as f32, additional_space + 2.0 * map.chunk_size as f32);
+            loaded = in_view(corners, pos_x, pos_z, map.chunk_size as f32, additional_space + map.chunk_size as f32);
         }
         
         let filepath = format!("./tmp/cache/chunk_{}.mesh", chunk.id);
+        let mesh_id = chunk.mesh_id.clone();
 
         if chunk.loaded && !loaded {
             chunk.loaded = false;
@@ -52,18 +55,25 @@ pub fn view_world(
         if !chunk.loaded && loaded {
             chunk.loaded = true;
 
-            let mesh_data = load_from_bin(filepath.as_str()).unwrap();
+            let sender = task_system.sender.clone();
 
-            let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+            AsyncComputeTaskPool::get().spawn(async move {
+                let mesh_data = load_from_bin(filepath.as_str()).unwrap();
 
-            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, mesh_data.positions);
-            mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, mesh_data.normals);
-            mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, mesh_data.uvs);
-            mesh.insert_indices(Indices::U32(mesh_data.indices));
+                let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
 
-            meshes.insert(chunk.mesh_id, mesh);
+                mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, mesh_data.positions);
+                mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, mesh_data.normals);
+                mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, mesh_data.uvs);
+                mesh.insert_indices(Indices::U32(mesh_data.indices));
 
-            println!("chunk_loaded");
+                let chunk_data =  ChunkData {
+                    mesh_id: mesh_id,
+                    mesh: mesh
+                };
+
+                sender.send(BackgroundTaskResult::ChunkLoaded(chunk_data)).unwrap();
+            }).detach();
         }
     }
 }
