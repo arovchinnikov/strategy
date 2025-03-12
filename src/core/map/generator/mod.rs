@@ -140,7 +140,8 @@ fn spawn_mesh_generation_task(
 }
 
 fn save_to_bin(mesh: &TerrainMeshData, path: PathBuf) -> std::io::Result<()> {
-    let encoded = bincode::serialize(mesh).unwrap();
+    let config = bincode::config::standard();
+    let encoded = bincode::encode_to_vec(mesh, config).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
     let mut file = File::create(path)?;
     file.write_all(&encoded)?;
     Ok(())

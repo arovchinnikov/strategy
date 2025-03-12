@@ -23,6 +23,10 @@ fn load_from_file(path: PathBuf) -> std::io::Result<TerrainMeshData> {
     let mut file = File::open(path)?;
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer)?;
-    let mesh: TerrainMeshData = bincode::deserialize(&buffer).unwrap();
+
+    let config = bincode::config::standard();
+    let (mesh, _) = bincode::decode_from_slice::<TerrainMeshData, _>(&buffer, config)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+
     Ok(mesh)
 }

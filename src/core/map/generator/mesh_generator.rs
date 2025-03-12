@@ -1,8 +1,10 @@
 use bevy::math::Vec3;
+use bincode::{Decode, Encode};
 use image::GrayImage;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+
+#[derive(Serialize, Deserialize, Encode, Decode, Debug, Clone)]
 pub struct TerrainMeshData {
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
