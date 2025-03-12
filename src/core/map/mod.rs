@@ -2,7 +2,7 @@ mod camera;
 mod sea;
 mod light;
 mod generator;
-mod components;
+pub(crate) mod components;
 
 use crate::core::map::generator::generate_terrain;
 use bevy::app::{App, Plugin, Startup};

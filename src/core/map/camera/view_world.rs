@@ -70,7 +70,7 @@ pub fn view_world(
             continue;
         }
 
-        if !chunk.loaded && loaded {
+        if !chunk.loaded && loaded && chunk.generated {
             chunk.loaded = true;
 
             let sender = task_system.sender.clone();

@@ -5,7 +5,12 @@ use crossbeam_channel::{unbounded, Receiver, Sender};
 use crate::core::async_tasks::chunk_lazy_load::handle_background_tasks;
 
 pub enum BackgroundTaskResult {
-    ChunkLoaded(ChunkData)
+    ChunkLoaded(ChunkData),
+    ChunkGenerated(GeneratedChunkData)
+}
+
+pub struct GeneratedChunkData {
+    pub entity: Entity,
 }
 
 pub struct ChunkData {
