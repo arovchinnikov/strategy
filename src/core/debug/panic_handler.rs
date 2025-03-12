@@ -13,7 +13,7 @@ pub fn setup_panic_handler() {
             backtrace
         );
 
-        let log_dir = "logs";
+        let log_dir = "tmp/logs";
         if let Err(e) = fs::create_dir_all(log_dir) {
             eprintln!("Failed to create logs directory: {}", e);
             return;
