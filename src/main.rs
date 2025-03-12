@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod core;
+mod pkg;
 
 use std::panic;
 use bevy::prelude::*;

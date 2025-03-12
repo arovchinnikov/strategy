@@ -3,7 +3,7 @@ use bevy::prelude::{default, Assets, Color, Commands, Mesh, Mesh3d, MeshMaterial
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 
 pub fn build(app: &mut bevy::prelude::App) {
-    //app.add_systems(Startup, init);
+    app.add_systems(Startup, init);
 }
 
 pub fn init(
@@ -27,7 +27,7 @@ pub fn init(
             ..default()
         })),
         Transform {
-            translation: Vec3::new(4096.0, 7.35, 2048.0),
+            translation: Vec3::new(4096.0, 6.15, 2048.0),
             scale: Vec3::new(1.0, 1.0, 1.0),
             ..default()
         },

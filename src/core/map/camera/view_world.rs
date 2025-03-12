@@ -1,14 +1,10 @@
 use crate::core::async_tasks::{BackgroundTaskResult, BackgroundTaskSystem, ChunkData};
 use crate::core::map::camera::CameraCorners;
-use crate::core::map::generator::TerrainMeshData;
-use crate::core::map::{WorldChunk, WorldMap};
-use bevy::asset::RenderAssetUsages;
-use bevy::prelude::{AssetId, Assets, Entity, Handle, Mesh, Mesh2d, Mesh3d, Query, ResMut, Resource, Transform};
-use bevy::render::mesh::{Indices, PrimitiveTopology};
+use crate::core::map::components::{WorldChunk, WorldMap};
+use crate::core::map::generator::mesh_loader::load_terrain_mesh;
+use bevy::prelude::{Assets, Entity, Handle, Mesh, Mesh3d, Query, ResMut, Resource, Transform};
 use bevy::render::view::RenderLayers;
 use bevy::tasks::AsyncComputeTaskPool;
-use std::fs::File;
-use std::io::Read;
 use std::time::Instant;
 
 #[derive(Default, Resource)]
@@ -40,14 +36,14 @@ pub fn process_pending_mesh_deletions(
 pub fn view_world(
     camera_corners: Query<&CameraCorners>,
     map: Query<&WorldMap>,
-    mut chunks: Query<(Entity, &Transform, &mut RenderLayers, &mut WorldChunk, &mut Mesh3d)>,
+    mut chunks: Query<(Entity, &Transform, &mut RenderLayers, &mut WorldChunk)>,
     task_system: ResMut<BackgroundTaskSystem>,
     mut pending_deletions: ResMut<PendingMeshDeletions>
 ) {
     let corners =  camera_corners.single();
     let map =  map.single();
 
-    for (entity, transform, mut render_layers, mut chunk, mut mesh) in chunks.iter_mut() {
+    for (entity, transform, mut render_layers, mut chunk) in chunks.iter_mut() {
         let pos_x = transform.translation.x;
         let pos_z = transform.translation.z;
 
@@ -67,8 +63,6 @@ pub fn view_world(
         if loaded == false {
             loaded = in_view(corners, pos_x, pos_z, map.chunk_size as f32, additional_space + map.chunk_size as f32);
         }
-        
-        let filepath = format!("./tmp/cache/chunk_{}.mesh", chunk.id);
 
         if chunk.loaded && !loaded {
             chunk.loaded = false;
@@ -80,34 +74,20 @@ pub fn view_world(
             chunk.loaded = true;
 
             let sender = task_system.sender.clone();
+            let chunk_id = chunk.id.clone();
 
             AsyncComputeTaskPool::get().spawn(async move {
-                let mesh_data = load_from_bin(filepath.as_str()).unwrap();
-
-                let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
-
-                mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, mesh_data.positions);
-                mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, mesh_data.normals);
-                mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, mesh_data.uvs);
-                mesh.insert_indices(Indices::U32(mesh_data.indices));
+                let loaded_mesh = load_terrain_mesh(chunk_id.as_str());
 
                 let chunk_data = ChunkData {
                     entity,
-                    mesh
+                    mesh: loaded_mesh,
                 };
 
                 sender.send(BackgroundTaskResult::ChunkLoaded(chunk_data)).unwrap();
             }).detach();
         }
     }
-}
-
-fn load_from_bin(path: &str) -> std::io::Result<TerrainMeshData> {
-    let mut file = File::open(path)?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
-    let mesh: TerrainMeshData = bincode::deserialize(&buffer).unwrap();
-    Ok(mesh)
 }
 
 fn in_view(

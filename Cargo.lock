@@ -167,7 +167,7 @@ dependencies = [
  "ndk-context",
  "ndk-sys 0.6.0+11769913",
  "num_enum",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -776,12 +776,11 @@ dependencies = [
  "bevy_audio",
  "bincode",
  "chrono",
+ "crc",
  "crossbeam-channel",
+ "dirs",
  "image",
- "obj-rs",
  "serde",
- "tokio",
- "wavefront_obj",
 ]
 
 [[package]]
@@ -1637,7 +1636,7 @@ dependencies = [
  "polling",
  "rustix",
  "slab",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1955,6 +1954,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "crc"
+version = "3.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69e6e4d7b33a94f0991c26729976b10ebde1d34c3ee82408fb536164fa10d636"
+dependencies = [
+ "crc-catalog",
+]
+
+[[package]]
+name = "crc-catalog"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
+
+[[package]]
 name = "crc32fast"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2053,6 +2067,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "dirs"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3e8aa94d75141228480295a7d0e7feb620b1a5ad9f12bc40be62411e38cce4e"
+dependencies = [
+ "dirs-sys",
+]
+
+[[package]]
+name = "dirs-sys"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e01a3366d27ee9890022452ee61b2b63a67e6f13f58900b651ff5665f0bb1fab"
+dependencies = [
+ "libc",
+ "option-ext",
+ "redox_users",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2141,7 +2176,7 @@ dependencies = [
  "const_panic",
  "encase_derive",
  "glam",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2606,7 +2641,7 @@ checksum = "c151a2a5ef800297b4e79efa4f4bec035c5f51d5ae587287c9b952bdf734cacd"
 dependencies = [
  "log",
  "presser",
- "thiserror",
+ "thiserror 1.0.69",
  "windows 0.58.0",
 ]
 
@@ -2868,7 +2903,7 @@ dependencies = [
  "combine",
  "jni-sys",
  "log",
- "thiserror",
+ "thiserror 1.0.69",
  "walkdir",
  "windows-sys 0.45.0",
 ]
@@ -3144,7 +3179,7 @@ dependencies = [
  "rustc-hash",
  "spirv",
  "termcolor",
- "thiserror",
+ "thiserror 1.0.69",
  "unicode-xid",
 ]
 
@@ -3163,7 +3198,7 @@ dependencies = [
  "regex",
  "regex-syntax 0.8.5",
  "rustc-hash",
- "thiserror",
+ "thiserror 1.0.69",
  "tracing",
  "unicode-ident",
 ]
@@ -3179,7 +3214,7 @@ dependencies = [
  "log",
  "ndk-sys 0.5.0+25.2.9519653",
  "num_enum",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3194,7 +3229,7 @@ dependencies = [
  "ndk-sys 0.6.0+11769913",
  "num_enum",
  "raw-window-handle",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3356,16 +3391,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "obj-rs"
-version = "0.7.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8247fd8f66340ad9c969f96e63a80a2f74b04e5403d92584b75e046006f4c7e1"
-dependencies = [
- "num-traits",
- "serde",
 ]
 
 [[package]]
@@ -3636,6 +3661,12 @@ name = "once_cell"
 version = "1.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "945462a4b81e43c4e3ba96bd7b49d834c6f61198356aa858733bc4acf3cbe62e"
+
+[[package]]
+name = "option-ext"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "orbclient"
@@ -3977,7 +4008,7 @@ dependencies = [
  "rand_chacha",
  "simd_helpers",
  "system-deps",
- "thiserror",
+ "thiserror 1.0.69",
  "v_frame",
  "wasm-bindgen",
 ]
@@ -4058,6 +4089,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "redox_users"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd6f9d3d47bdd2ad6945c5015a226ec6155d0bcdfd8f7cd29f86b71f8de99d2b"
+dependencies = [
+ "getrandom",
+ "libredox",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "regex"
 version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4121,7 +4163,7 @@ checksum = "6006a627c1a38d37f3d3a85c6575418cfe34a5392d60a686d0071e1c8d427acb"
 dependencies = [
  "cpal",
  "lewton",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -4370,7 +4412,7 @@ dependencies = [
  "log",
  "memmap2",
  "rustix",
- "thiserror",
+ "thiserror 1.0.69",
  "wayland-backend",
  "wayland-client",
  "wayland-csd-frame",
@@ -4514,7 +4556,16 @@ version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
+dependencies = [
+ "thiserror-impl 2.0.12",
 ]
 
 [[package]]
@@ -4522,6 +4573,17 @@ name = "thiserror-impl"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f7cf42b4507d8ea322120659672cf1b9dbb93f8f2d4ecfd6e51350ff5b17a1d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4597,16 +4659,6 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
-
-[[package]]
-name = "tokio"
-version = "1.44.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9975ea0f48b5aa3972bf2d888c238182458437cc2a19374b81b25cdf1023fb3a"
-dependencies = [
- "backtrace",
- "pin-project-lite",
-]
 
 [[package]]
 name = "toml"
@@ -4956,12 +5008,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "wavefront_obj"
-version = "5.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33c9cbb65c5aac6493000cdabe11f49588d19b547ccd7501f44fc96a6b9406ff"
-
-[[package]]
 name = "wayland-backend"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5141,7 +5187,7 @@ dependencies = [
  "raw-window-handle",
  "rustc-hash",
  "smallvec",
- "thiserror",
+ "thiserror 1.0.69",
  "wgpu-hal",
  "wgpu-types",
 ]
@@ -5183,7 +5229,7 @@ dependencies = [
  "renderdoc-sys",
  "rustc-hash",
  "smallvec",
- "thiserror",
+ "thiserror 1.0.69",
  "wasm-bindgen",
  "web-sys",
  "wgpu-types",

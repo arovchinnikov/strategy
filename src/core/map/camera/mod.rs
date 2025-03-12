@@ -1,10 +1,9 @@
 mod view_world;
 
-use std::slice::Windows;
+use crate::core::map::camera::view_world::{process_pending_mesh_deletions, view_world, PendingMeshDeletions};
 use bevy::app::{Startup, Update};
 use bevy::math::{vec3, Vec3};
-use bevy::prelude::{ButtonInput, Camera, Camera3d, Commands, Component, FixedUpdate, GlobalTransform, KeyCode, Query, Ray3d, Res, ResMut, Time, Transform, Vec2, Window};
-use crate::core::map::camera::view_world::{process_pending_mesh_deletions, view_world, PendingMeshDeletions};
+use bevy::prelude::{ButtonInput, Camera, Camera3d, Commands, Component, FixedUpdate, GlobalTransform, KeyCode, Query, Ray3d, Res, Time, Transform, Vec2, Window};
 
 #[derive(Component)]
 struct CameraController {
