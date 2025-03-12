@@ -9,7 +9,7 @@ pub enum BackgroundTaskResult {
 }
 
 pub struct ChunkData {
-    pub mesh_id: AssetId<Mesh>,
+    pub entity: Entity,
     pub mesh: Mesh,
 }
 

@@ -3,8 +3,8 @@ mod view_world;
 use std::slice::Windows;
 use bevy::app::{Startup, Update};
 use bevy::math::{vec3, Vec3};
-use bevy::prelude::{ButtonInput, Camera, Camera3d, Commands, Component, GlobalTransform, KeyCode, Query, Ray3d, Res, ResMut, Time, Transform, Vec2, Window};
-use crate::core::map::camera::view_world::view_world;
+use bevy::prelude::{ButtonInput, Camera, Camera3d, Commands, Component, FixedUpdate, GlobalTransform, KeyCode, Query, Ray3d, Res, ResMut, Time, Transform, Vec2, Window};
+use crate::core::map::camera::view_world::{process_pending_mesh_deletions, view_world, PendingMeshDeletions};
 
 #[derive(Component)]
 struct CameraController {
@@ -22,8 +22,10 @@ struct CameraCorners {
 pub fn build(app: &mut bevy::prelude::App) {
     app.add_systems(Startup, init);
     app.add_systems(Update, camera_movement);
-    app.add_systems(Update, update_camera_corners);
+    app.add_systems(FixedUpdate, update_camera_corners);
     app.add_systems(Update, view_world);
+    app.init_resource::<PendingMeshDeletions>();
+    app.add_systems(Update, process_pending_mesh_deletions);
 }
 
 fn init(mut commands: Commands) {

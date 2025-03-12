@@ -5,6 +5,7 @@ use crate::core::async_tasks::{BackgroundTaskResult, BackgroundTaskSystem};
 pub fn handle_background_tasks(
     task_system: ResMut<BackgroundTaskSystem>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut query: Query<(Entity, &mut Mesh3d)>
 ) {
     let mut counter = 0;
 
@@ -12,7 +13,11 @@ pub fn handle_background_tasks(
         match result {
             BackgroundTaskResult::ChunkLoaded(chunk_data) => {
                 let timer = Instant::now();
-                meshes.insert(chunk_data.mesh_id, chunk_data.mesh);
+                let mesh = meshes.add(chunk_data.mesh);
+                
+                if let Ok((_, mut mesh3d)) = query.get_mut(chunk_data.entity) {
+                    mesh3d.0 = mesh;
+                }
 
                 counter = counter + 1;
 
