@@ -5,7 +5,6 @@ use crate::core::map::generator::mesh_loader::load_terrain_mesh;
 use bevy::prelude::{Assets, Entity, Handle, Mesh, Mesh3d, Query, ResMut, Resource, Transform};
 use bevy::render::view::RenderLayers;
 use bevy::tasks::AsyncComputeTaskPool;
-use std::time::Instant;
 
 #[derive(Default, Resource)]
 pub struct PendingMeshDeletions(Vec<Entity>);
@@ -15,21 +14,28 @@ pub fn process_pending_mesh_deletions(
     mut query: Query<(Entity, &mut Mesh3d)>,
     mut pending_deletions: ResMut<PendingMeshDeletions>,
 ) {
-    if let Some(entity) = pending_deletions.0.pop() {
-        let timer = Instant::now();
+    let deletion_batch_size = 5;
+    let delete_count = pending_deletions.0.len().min(deletion_batch_size);
+
+    let entities_to_process: Vec<Entity> = pending_deletions.0.drain(0..delete_count).collect();
+
+    let mut deletions_counter = 0;
+    for entity in entities_to_process {
         if let Ok((_, mut mesh3d)) = query.get_mut(entity) {
             let mesh_id = mesh3d.0.id();
-            
+
             mesh3d.0 = Handle::default();
-            
 
             if meshes.contains(mesh_id) {
                 meshes.remove_untracked(mesh_id);
+                deletions_counter = deletions_counter + 1;
             }
         }
+    }
 
-        let remove_time = timer.elapsed();
-        println!("chunk unloaded {:?}", remove_time);
+    if !deletions_counter > 0 {
+        #[cfg(debug_assertions)]
+        println!("Processed {} chunk unloads", deletions_counter);
     }
 }
 
