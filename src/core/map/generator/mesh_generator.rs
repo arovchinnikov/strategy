@@ -43,7 +43,7 @@ pub fn generate_terrain_mesh(
         }
     }
 
-    let mut indices = Vec::new();
+    let mut indices = Vec::with_capacity((subdivisions_x * subdivisions_z * 6) as usize);
     let flat_threshold = 0.0;
 
     let initial_block_size = subdivisions_x.min(subdivisions_z);
@@ -64,28 +64,106 @@ pub fn generate_terrain_mesh(
 
     let mut normals = vec![[0.0; 3]; positions.len()];
 
+    for i in (0..indices.len()).step_by(3) {
+        let i1 = indices[i] as usize;
+        let i2 = indices[i+1] as usize;
+        let i3 = indices[i+2] as usize;
+
+        let p1 = Vec3::new(positions[i1][0], positions[i1][1], positions[i1][2]);
+        let p2 = Vec3::new(positions[i2][0], positions[i2][1], positions[i2][2]);
+        let p3 = Vec3::new(positions[i3][0], positions[i3][1], positions[i3][2]);
+
+        let v1 = p2 - p1;
+        let v2 = p3 - p1;
+        let normal = v1.cross(v2).normalize();
+
+        normals[i1][0] += normal.x;
+        normals[i1][1] += normal.y;
+        normals[i1][2] += normal.z;
+
+        normals[i2][0] += normal.x;
+        normals[i2][1] += normal.y;
+        normals[i2][2] += normal.z;
+
+        normals[i3][0] += normal.x;
+        normals[i3][1] += normal.y;
+        normals[i3][2] += normal.z;
+    }
+
+    for normal in &mut normals {
+        let length = (normal[0]*normal[0] + normal[1]*normal[1] + normal[2]*normal[2]).sqrt();
+        if length > 0.001 {
+            normal[0] /= length;
+            normal[1] /= length;
+            normal[2] /= length;
+        }
+    }
+
+    let vertices_per_row = subdivisions_x + 1;
+    let vertices_per_column = subdivisions_z + 1;
+
+    let mut problem_vertices = Vec::new();
     for i in 0..positions.len() {
-        let local_x = positions[i][0];
-        let local_z = positions[i][2];
+        let normal_vec = Vec3::new(normals[i][0], normals[i][1], normals[i][2]);
+        if normal_vec.length() < 0.001 {
+            problem_vertices.push(i);
+        }
+    }
 
-        let global_x = start_x + local_x;
-        let global_z = start_z + local_z;
+    for vertex_idx in problem_vertices {
+        let mut valid_neighbors = Vec::new();
+        let row = vertex_idx / (vertices_per_row as usize);
+        let col = vertex_idx % (vertices_per_row as usize);
 
-        let left_x = (global_x - 1.0).max(0.0);
-        let right_x = (global_x + 1.0).min(heightmap.width() as f32 - 1.0);
-        let down_z = (global_z - 1.0).max(0.0);
-        let up_z = (global_z + 1.0).min(heightmap.height() as f32 - 1.0);
+        if row > 0 {
+            let upper_idx = (row - 1) * (vertices_per_row as usize) + col;
+            if Vec3::new(normals[upper_idx][0], normals[upper_idx][1], normals[upper_idx][2]).length() > 0.001 {
+                valid_neighbors.push(upper_idx);
+            }
+        }
 
-        let h_left = get_height_global(left_x, global_z, heightmap);
-        let h_right = get_height_global(right_x, global_z, heightmap);
-        let delta_x = h_right - h_left;
+        if row < (vertices_per_column as usize) - 1 {
+            let lower_idx = (row + 1) * (vertices_per_row as usize) + col;
+            if Vec3::new(normals[lower_idx][0], normals[lower_idx][1], normals[lower_idx][2]).length() > 0.001 {
+                valid_neighbors.push(lower_idx);
+            }
+        }
 
-        let h_down = get_height_global(global_x, down_z, heightmap);
-        let h_up = get_height_global(global_x, up_z, heightmap);
-        let delta_z = h_up - h_down;
+        if col > 0 {
+            let left_idx = row * (vertices_per_row as usize) + (col - 1);
+            if Vec3::new(normals[left_idx][0], normals[left_idx][1], normals[left_idx][2]).length() > 0.001 {
+                valid_neighbors.push(left_idx);
+            }
+        }
 
-        let normal = Vec3::new(-delta_x, 2.0, -delta_z).normalize();
-        normals[i] = [normal.x, normal.y, normal.z];
+        if col < (vertices_per_row as usize) - 1 {
+            let right_idx = row * (vertices_per_row as usize) + (col + 1);
+            if Vec3::new(normals[right_idx][0], normals[right_idx][1], normals[right_idx][2]).length() > 0.001 {
+                valid_neighbors.push(right_idx);
+            }
+        }
+
+        if !valid_neighbors.is_empty() {
+            let mut avg_normal = Vec3::ZERO;
+            for neighbor_idx in valid_neighbors {
+                avg_normal += Vec3::new(
+                    normals[neighbor_idx][0],
+                    normals[neighbor_idx][1],
+                    normals[neighbor_idx][2]
+                );
+            }
+
+            if avg_normal.length() > 0.001 {
+                avg_normal = avg_normal.normalize();
+                normals[vertex_idx][0] = avg_normal.x;
+                normals[vertex_idx][1] = avg_normal.y;
+                normals[vertex_idx][2] = avg_normal.z;
+            } else {
+                normals[vertex_idx] = [0.0, 1.0, 0.0];
+            }
+        } else {
+            normals[vertex_idx] = [0.0, 1.0, 0.0];
+        }
     }
 
     TerrainMeshData {
