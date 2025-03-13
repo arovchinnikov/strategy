@@ -17,18 +17,42 @@ pub fn handle_background_tasks(
             BackgroundTaskResult::ChunkLoaded(chunk_data) => {
                 let timer = Instant::now();
 
-                if let Ok((entity, mut mesh3d, _)) = q.get_mut(chunk_data.entity) {
-                    // Используем пул мешей вместо прямого создания
-                    let mesh_handle = mesh_pool.get_mesh(entity, &mut meshes);
+                if let Ok((entity, mut mesh3d, chunk)) = q.get_mut(chunk_data.entity) {
+                    let mesh_data = {
+                        let positions = match chunk_data.mesh.attribute(Mesh::ATTRIBUTE_POSITION).unwrap() {
+                            bevy::render::mesh::VertexAttributeValues::Float32x3(values) => values.clone(),
+                            _ => panic!("Неожиданный формат для positions"),
+                        };
 
-                    // Получаем меш из ресурса и заполняем его данными
-                    if let Some(mesh) = meshes.get_mut(&mesh_handle) {
-                        // Заполняем меш данными из загруженного чанка
-                        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, chunk_data.mesh.attribute(Mesh::ATTRIBUTE_POSITION).unwrap().clone());
-                        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, chunk_data.mesh.attribute(Mesh::ATTRIBUTE_NORMAL).unwrap().clone());
-                        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, chunk_data.mesh.attribute(Mesh::ATTRIBUTE_UV_0).unwrap().clone());
-                        mesh.insert_indices(chunk_data.mesh.indices().unwrap().clone());
-                    }
+                        let normals = match chunk_data.mesh.attribute(Mesh::ATTRIBUTE_NORMAL).unwrap() {
+                            bevy::render::mesh::VertexAttributeValues::Float32x3(values) => values.clone(),
+                            _ => panic!("Неожиданный формат для normals"),
+                        };
+
+                        let uvs = match chunk_data.mesh.attribute(Mesh::ATTRIBUTE_UV_0).unwrap() {
+                            bevy::render::mesh::VertexAttributeValues::Float32x2(values) => values.clone(),
+                            _ => panic!("Неожиданный формат для uvs"),
+                        };
+
+                        let indices = match chunk_data.mesh.indices().unwrap() {
+                            bevy::render::mesh::Indices::U16(indices) => indices.iter().map(|&i| i as u32).collect(),
+                            bevy::render::mesh::Indices::U32(indices) => indices.clone(),
+                        };
+
+                        crate::core::map::generator::mesh_generator::TerrainMeshData {
+                            positions,
+                            normals,
+                            uvs,
+                            indices,
+                        }
+                    };
+
+                    let mesh_handle = mesh_pool.update_and_cache_mesh(
+                        entity,
+                        &chunk.id,
+                        &mesh_data,
+                        &mut meshes
+                    );
 
                     mesh3d.0 = mesh_handle;
                 }
