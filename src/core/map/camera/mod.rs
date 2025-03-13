@@ -1,8 +1,10 @@
 mod view_world;
+mod zoom;
 
 use crate::core::map::camera::view_world::{process_pending_mesh_deletions, view_world, PendingMeshDeletions};
+use crate::core::map::camera::zoom::zoom_handler;
 use bevy::app::{Startup, Update};
-use bevy::math::{vec3, Vec3};
+use bevy::math::Vec3;
 use bevy::prelude::{ButtonInput, Camera, Camera3d, Commands, Component, FixedUpdate, GlobalTransform, KeyCode, MouseButton, Query, Ray3d, Res, ResMut, Resource, Time, Transform, Vec2, Window};
 
 const MAP_MIN_X: f32 = -256.0;
@@ -13,7 +15,14 @@ const MAP_MAX_Z: f32 = 4096.0 + 256.0;
 #[derive(Component)]
 struct CameraController {
     speed: f32,
-    drag_speed: f32,
+    zoom: CameraZoom
+}
+
+struct CameraZoom {
+    speed: f32,
+    target_height: f32,
+    current_height: f32,
+    smooth_factor: f32,
 }
 
 #[derive(Resource, Default)]
@@ -36,18 +45,26 @@ pub fn build(app: &mut bevy::prelude::App) {
     app.add_systems(Update, camera_drag_movement);
     app.add_systems(FixedUpdate, update_camera_corners);
     app.add_systems(Update, view_world);
+    app.add_systems(FixedUpdate, zoom_handler);
     app.init_resource::<PendingMeshDeletions>();
     app.init_resource::<CameraDragState>();
     app.add_systems(Update, process_pending_mesh_deletions);
 }
 
 fn init(mut commands: Commands) {
+    let initial_height = 120.0;
+
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(1100.0, 180.0, 720.0).looking_at(vec3(1100.0, 0.0, 600.0), Vec3::Y),
+        Transform::from_xyz(1100.0, initial_height, 720.0),
         CameraController {
             speed: 440.0,
-            drag_speed: 40.5,
+            zoom: CameraZoom {
+                speed: 1200.0,
+                target_height: initial_height,
+                current_height: initial_height,
+                smooth_factor: 0.1,
+            }
         },
         CameraCorners {
             min_x: 0.0,
