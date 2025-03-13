@@ -1,13 +1,12 @@
 mod camera;
 mod sea;
 mod light;
-mod generator;
+pub(crate) mod generator;
 pub(crate) mod components;
 
 use crate::core::map::generator::generate_terrain;
 use bevy::app::{App, Plugin, Startup};
 use bevy::prelude::{BuildChildren, Component};
-use std::io::{Read, Write};
 
 pub struct MapPlugin;
 impl Plugin for MapPlugin {
@@ -16,7 +15,10 @@ impl Plugin for MapPlugin {
         camera::build(app);
         sea::build(app);
         light::build(app);
-        
+
+        // Регистрируем модуль пула мешей
+        generator::mesh_pool::build(app);
+
         app.add_systems(Startup, generate_terrain);
     }
 }

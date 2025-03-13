@@ -16,8 +16,9 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use crate::core::async_tasks::{BackgroundTaskResult, BackgroundTaskSystem, GeneratedChunkData};
 
-mod mesh_generator;
+pub(crate) mod mesh_generator;
 pub(crate) mod mesh_loader;
+pub(crate) mod mesh_pool;
 mod cache;
 
 pub fn build(app: &mut App) {
