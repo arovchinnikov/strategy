@@ -18,6 +18,7 @@ use crate::core::async_tasks::{BackgroundTaskResult, BackgroundTaskSystem, Gener
 
 mod mesh_generator;
 pub(crate) mod mesh_loader;
+pub(crate) mod mesh_pool;
 mod cache;
 
 pub fn build(app: &mut App) {

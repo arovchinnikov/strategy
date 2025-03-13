@@ -5,11 +5,13 @@ use crate::core::map::generator::mesh_loader::load_terrain_mesh;
 use bevy::prelude::{Assets, Entity, Handle, Mesh, Mesh3d, Query, ResMut, Resource, Transform};
 use bevy::render::view::RenderLayers;
 use bevy::tasks::AsyncComputeTaskPool;
+use crate::core::map::generator::mesh_pool::MeshPool;
 
 #[derive(Default, Resource)]
 pub struct PendingMeshDeletions(Vec<Entity>);
 
 pub fn process_pending_mesh_deletions(
+    mut mesh_pool: ResMut<MeshPool>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut query: Query<(Entity, &mut Mesh3d)>,
     mut pending_deletions: ResMut<PendingMeshDeletions>,
@@ -21,21 +23,23 @@ pub fn process_pending_mesh_deletions(
 
     let mut deletions_counter = 0;
     for entity in entities_to_process {
-        if let Ok((_, mut mesh3d)) = query.get_mut(entity) {
-            let mesh_id = mesh3d.0.id();
+        if let Ok((entity, mut mesh3d)) = query.get_mut(entity) {
+            // Возвращаем меш в пул вместо удаления
+            mesh_pool.return_mesh(entity, &mut meshes);
 
+            // Устанавливаем пустой хэндл
             mesh3d.0 = Handle::default();
 
-            if meshes.contains(mesh_id) {
-                meshes.remove_untracked(mesh_id);
-                deletions_counter = deletions_counter + 1;
-            }
+            deletions_counter = deletions_counter + 1;
         }
     }
 
-    if !deletions_counter > 0 {
+    if deletions_counter > 0 {
         #[cfg(debug_assertions)]
-        println!("Processed {} chunk unloads", deletions_counter);
+        let (available, active, max) = mesh_pool.stats();
+        #[cfg(debug_assertions)]
+        println!("Processed {} chunk unloads. Mesh pool: {}/{} available, {} active",
+                 deletions_counter, available, max, active);
     }
 }
 
