@@ -5,11 +5,13 @@ use crate::core::map::generator::mesh_loader::load_terrain_mesh;
 use bevy::prelude::{Assets, Entity, Handle, Mesh, Mesh3d, Query, ResMut, Resource, Transform};
 use bevy::render::view::RenderLayers;
 use bevy::tasks::AsyncComputeTaskPool;
+use crate::core::map::generator::mesh_pool::MeshPool;
 
 #[derive(Default, Resource)]
 pub struct PendingMeshDeletions(Vec<Entity>);
 
 pub fn process_pending_mesh_deletions(
+    mut mesh_pool: ResMut<MeshPool>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut query: Query<(Entity, &mut Mesh3d)>,
     mut pending_deletions: ResMut<PendingMeshDeletions>,
@@ -21,21 +23,21 @@ pub fn process_pending_mesh_deletions(
 
     let mut deletions_counter = 0;
     for entity in entities_to_process {
-        if let Ok((_, mut mesh3d)) = query.get_mut(entity) {
-            let mesh_id = mesh3d.0.id();
+        if let Ok((entity, mut mesh3d)) = query.get_mut(entity) {
+            mesh_pool.return_mesh(entity, &mut meshes);
 
             mesh3d.0 = Handle::default();
 
-            if meshes.contains(mesh_id) {
-                meshes.remove_untracked(mesh_id);
-                deletions_counter = deletions_counter + 1;
-            }
+            deletions_counter = deletions_counter + 1;
         }
     }
 
-    if !deletions_counter > 0 {
+    if deletions_counter > 0 {
         #[cfg(debug_assertions)]
-        println!("Processed {} chunk unloads", deletions_counter);
+        let (available, cached, active, max) = mesh_pool.stats();
+        #[cfg(debug_assertions)]
+        println!("Удалено {} чанков. Пул мешей: {}/{} свободно, {} в кэше, {} активно",
+                 deletions_counter, available, max, cached, active);
     }
 }
 
@@ -44,10 +46,12 @@ pub fn view_world(
     map: Query<&WorldMap>,
     mut chunks: Query<(Entity, &Transform, &mut RenderLayers, &mut WorldChunk)>,
     task_system: ResMut<BackgroundTaskSystem>,
-    mut pending_deletions: ResMut<PendingMeshDeletions>
+    mut pending_deletions: ResMut<PendingMeshDeletions>,
+    mut mesh_pool: ResMut<MeshPool>,
+    mut query_mesh: Query<&mut Mesh3d>,
 ) {
-    let corners =  camera_corners.single();
-    let map =  map.single();
+    let corners = camera_corners.single();
+    let map = map.single();
 
     for (entity, transform, mut render_layers, mut chunk) in chunks.iter_mut() {
         let pos_x = transform.translation.x;
@@ -79,6 +83,19 @@ pub fn view_world(
         if !chunk.loaded && loaded && chunk.generated {
             chunk.loaded = true;
 
+            // Сначала проверяем, есть ли уже этот меш в кэше
+            if mesh_pool.has_cached_mesh(&chunk.id) {
+                if let Some(cached_mesh_handle) = mesh_pool.get_cached_mesh(entity, &chunk.id) {
+                    if let Ok(mut mesh3d) = query_mesh.get_mut(entity) {
+                        mesh3d.0 = cached_mesh_handle;
+                        #[cfg(debug_assertions)]
+                        println!("Использован кэшированный меш для чанка {}", chunk.id);
+                        continue; // Используем кэшированный меш, пропускаем асинхронную загрузку
+                    }
+                }
+            }
+
+            // Если в кэше не найдено, загружаем асинхронно
             let sender = task_system.sender.clone();
             let chunk_id = chunk.id.clone();
 
