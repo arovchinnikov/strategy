@@ -19,7 +19,7 @@ struct CameraController {
 #[derive(Resource, Default)]
 struct CameraDragState {
     is_dragging: bool,
-    last_cursor_position: Option<Vec2>,
+    drag_start_world_position: Option<Vec3>,
 }
 
 #[derive(Component)]
@@ -133,40 +133,43 @@ fn camera_movement(
 }
 
 fn camera_drag_movement(
-    time: Res<Time>,
     window: Query<&Window>,
     mouse_input: Res<ButtonInput<MouseButton>>,
     mut drag_state: ResMut<CameraDragState>,
-    mut query: Query<(&CameraController, &mut Transform, &GlobalTransform)>,
+    mut query: Query<(&mut Transform, &GlobalTransform, &Camera)>,
 ) {
     let window = window.single();
-    let (controller, mut transform, global_transform) = query.single_mut();
+    let (mut transform, global_transform, camera) = query.single_mut();
 
     if mouse_input.just_pressed(MouseButton::Right) {
-        drag_state.is_dragging = true;
-        drag_state.last_cursor_position = window.cursor_position();
+        if let Some(cursor_position) = window.cursor_position() {
+            if let Ok(ray) = camera.viewport_to_world(global_transform, cursor_position) {
+                if let Some(world_position) = ray_intersect_plane(ray, Vec3::Y, 0.0) {
+                    drag_state.is_dragging = true;
+                    drag_state.drag_start_world_position = Some(world_position);
+                }
+            }
+        }
     }
 
     if mouse_input.just_released(MouseButton::Right) {
         drag_state.is_dragging = false;
-        drag_state.last_cursor_position = None;
+        drag_state.drag_start_world_position = None;
     }
 
     if drag_state.is_dragging {
-        if let Some(current_cursor) = window.cursor_position() {
-            if let Some(last_cursor) = drag_state.last_cursor_position {
-                let delta = current_cursor - last_cursor;
+        if let Some(cursor_position) = window.cursor_position() {
+            if let Some(start_world_pos) = drag_state.drag_start_world_position {
+                if let Ok(ray) = camera.viewport_to_world(global_transform, cursor_position) {
+                    if let Some(current_world_pos) = ray_intersect_plane(ray, Vec3::Y, 0.0) {
+                        let world_delta = start_world_pos - current_world_pos;
 
-                if delta.length_squared() > 0.0 {
-                    let cursor_delta_world = get_cursor_world_delta(delta, global_transform) * -1.0;
-
-                    let movement = cursor_delta_world * controller.drag_speed * time.delta_secs();
-                    let new_position = transform.translation + movement;
-                    transform.translation = clamp_camera_position(new_position);
+                        let movement = Vec3::new(world_delta.x, 0.0, world_delta.z);
+                        let new_position = transform.translation + movement;
+                        transform.translation = clamp_camera_position(new_position);
+                    }
                 }
             }
-
-            drag_state.last_cursor_position = Some(current_cursor);
         }
     }
 }
