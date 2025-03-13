@@ -48,7 +48,7 @@ pub fn generate_terrain(
         GlobalTransform::default(),
         Visibility::default(),
         WorldMap {
-            chunk_size: chunk_size,
+            chunk_size,
             chunks_with: num_chunks_x,
             chunks_height: num_chunks_z
         }
