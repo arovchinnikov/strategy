@@ -3,6 +3,7 @@ mod chunk_lazy_load;
 use bevy::prelude::*;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use crate::core::async_tasks::chunk_lazy_load::handle_background_tasks;
+use crate::core::map::generator::cache::LodLevel;
 
 pub enum BackgroundTaskResult {
     ChunkLoaded(ChunkData),
@@ -16,6 +17,7 @@ pub struct GeneratedChunkData {
 pub struct ChunkData {
     pub entity: Entity,
     pub mesh: Mesh,
+    pub lod: Option<LodLevel>,
 }
 
 #[derive(Resource)]

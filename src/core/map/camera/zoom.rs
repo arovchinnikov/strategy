@@ -1,16 +1,17 @@
+use crate::core::map::camera::{CameraController, CameraLodState};
 use bevy::input::mouse::MouseWheel;
-use bevy::prelude::{EulerRot, EventReader, Quat, Query, Res, Time, Transform};
-use crate::core::map::camera::CameraController;
+use bevy::prelude::{EulerRot, EventReader, Quat, Query, Res, ResMut, Time, Transform};
 
-const MIN_HEIGHT: f32 = 60.0;      // Новый минимальный уровень высоты
-const MAX_HEIGHT: f32 = 1300.0;   // Новый максимальный уровень высоты
-const MIN_TILT: f32 = -0.6;       // Новый минимальный наклон
+const MIN_HEIGHT: f32 = 60.0;
+const MAX_HEIGHT: f32 = 1300.0;
+const MIN_TILT: f32 = -0.6;
 const MAX_TILT: f32 = -1.35;
 
 pub fn zoom_handler(
     time: Res<Time>,
     mut mouse_wheel_events: EventReader<MouseWheel>,
     mut query: Query<(&mut CameraController, &mut Transform)>,
+    mut lod_state: ResMut<CameraLodState>,
 ) {
     let mut scroll = 0.0;
     for event in mouse_wheel_events.read() {
@@ -35,6 +36,7 @@ pub fn zoom_handler(
         let pitch_angle = height_to_tilt(controller.zoom.current_height);
         let (yaw, _, roll) = transform.rotation.to_euler(EulerRot::YXZ);
         transform.rotation = Quat::from_euler(EulerRot::YXZ, yaw, pitch_angle, roll);
+        lod_state.current_height = controller.zoom.current_height;
     }
 }
 

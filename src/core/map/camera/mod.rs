@@ -1,11 +1,12 @@
 mod view_world;
 mod zoom;
 
-use crate::core::map::camera::view_world::{process_pending_mesh_deletions, view_world, PendingMeshDeletions};
+use crate::core::map::camera::view_world::{process_lod_changes, process_pending_mesh_deletions, view_world, PendingLodChanges, PendingMeshDeletions};
 use crate::core::map::camera::zoom::zoom_handler;
 use bevy::app::{Startup, Update};
 use bevy::math::Vec3;
 use bevy::prelude::{ButtonInput, Camera, Camera3d, Commands, Component, FixedUpdate, GlobalTransform, KeyCode, MouseButton, Query, Ray3d, Res, ResMut, Resource, Time, Transform, Vec2, Window};
+use crate::core::map::generator::cache::LodLevel;
 
 const MAP_MIN_X: f32 = -256.0;
 const MAP_MAX_X: f32 = 8192.0 + 256.0;
@@ -39,6 +40,31 @@ struct CameraCorners {
     max_z: f32,
 }
 
+#[derive(Resource)]
+pub struct CameraLodState {
+    pub current_height: f32,
+    pub lod_thresholds: [f32; 3],
+}
+
+impl Default for CameraLodState {
+    fn default() -> Self {
+        Self {
+            current_height: 120.0,
+            lod_thresholds: [300.0, 800.0, f32::MAX],
+        }
+    }
+}
+
+pub fn determine_lod_level(camera_height: f32, thresholds: &[f32; 3]) -> LodLevel {
+    if camera_height < thresholds[0] {
+        LodLevel::High
+    } else if camera_height < thresholds[1] {
+        LodLevel::Medium
+    } else {
+        LodLevel::Low
+    }
+}
+
 pub fn build(app: &mut bevy::prelude::App) {
     app.add_systems(Startup, init);
     app.add_systems(Update, camera_movement);
@@ -46,9 +72,22 @@ pub fn build(app: &mut bevy::prelude::App) {
     app.add_systems(FixedUpdate, update_camera_corners);
     app.add_systems(Update, view_world);
     app.add_systems(FixedUpdate, zoom_handler);
+    app.add_systems(Update, update_lod_state); // Система обновления состояния LOD
+    app.add_systems(Update, process_lod_changes); // Система обработки изменений LOD
     app.init_resource::<PendingMeshDeletions>();
     app.init_resource::<CameraDragState>();
+    app.init_resource::<CameraLodState>(); // Ресурс состояния LOD
+    app.init_resource::<PendingLodChanges>(); // Инициализируем ресурс для изменений LOD
     app.add_systems(Update, process_pending_mesh_deletions);
+}
+
+fn update_lod_state(
+    query: Query<&CameraController>,
+    mut lod_state: ResMut<CameraLodState>,
+) {
+    if let Ok(controller) = query.get_single() {
+        lod_state.current_height = controller.zoom.current_height;
+    }
 }
 
 fn init(mut commands: Commands) {

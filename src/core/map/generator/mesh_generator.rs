@@ -3,7 +3,6 @@ use bincode::{Decode, Encode};
 use image::GrayImage;
 use serde::{Deserialize, Serialize};
 
-
 #[derive(Serialize, Deserialize, Encode, Decode, Debug, Clone)]
 pub struct TerrainMeshData {
     pub positions: Vec<[f32; 3]>,
@@ -12,15 +11,27 @@ pub struct TerrainMeshData {
     pub indices: Vec<u32>,
 }
 
+use crate::core::map::generator::cache::LodLevel;
+
 pub fn generate_terrain_mesh(
     start_x: f32,
     start_z: f32,
     width: f32,
     height: f32,
-    subdivisions_x: u32,
-    subdivisions_z: u32,
+    lod_level: LodLevel,
     heightmap: &GrayImage,
 ) -> TerrainMeshData {
+    let base_subdivisions = 256;
+
+    let subdivisions_factor = match lod_level {
+        LodLevel::High => 1,
+        LodLevel::Medium => 2,
+        LodLevel::Low => 4,
+    };
+
+    let subdivisions_x = base_subdivisions / subdivisions_factor;
+    let subdivisions_z = base_subdivisions / subdivisions_factor;
+
     let vert_count = ((subdivisions_x + 1) * (subdivisions_z + 1)) as usize;
     let mut positions = Vec::with_capacity(vert_count);
     let mut uvs = Vec::with_capacity(vert_count);
@@ -43,8 +54,9 @@ pub fn generate_terrain_mesh(
         }
     }
 
-    let mut indices = Vec::with_capacity((subdivisions_x * subdivisions_z * 6) as usize);
     let flat_threshold = 0.0;
+
+    let mut indices = Vec::with_capacity((subdivisions_x * subdivisions_z * 6) as usize);
 
     let initial_block_size = subdivisions_x.min(subdivisions_z);
     process_block(

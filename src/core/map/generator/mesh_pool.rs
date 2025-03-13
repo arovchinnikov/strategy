@@ -1,11 +1,12 @@
 use bevy::prelude::*;
 use bevy::utils::hashbrown::HashMap;
 use std::collections::VecDeque;
+use crate::core::map::generator::cache::LodLevel;
 
 #[derive(Resource)]
 pub struct MeshPool {
     available_generic_meshes: VecDeque<Handle<Mesh>>,
-    cached_chunk_meshes: HashMap<String, Handle<Mesh>>,
+    cached_chunk_meshes: HashMap<String, HashMap<LodLevel, Handle<Mesh>>>,
     active_meshes: HashMap<Entity, MeshUsageInfo>,
     min_pool_size: usize,
     max_pool_size: usize,
@@ -15,6 +16,7 @@ pub struct MeshPool {
 struct MeshUsageInfo {
     handle: Handle<Mesh>,
     chunk_id: Option<String>,
+    lod_level: Option<LodLevel>,
 }
 
 impl Default for MeshPool {
@@ -67,29 +69,31 @@ impl MeshPool {
         println!("Пул мешей инициализирован с {} элементами", self.min_pool_size);
     }
 
-    pub fn has_cached_mesh(&self, chunk_id: &str) -> bool {
-        self.cached_chunk_meshes.contains_key(chunk_id)
-    }
-
-    pub fn get_cached_mesh(&mut self, entity: Entity, chunk_id: &str) -> Option<Handle<Mesh>> {
-        if let Some(mesh_handle) = self.cached_chunk_meshes.remove(chunk_id) {
-            self.active_meshes.insert(entity, MeshUsageInfo {
-                handle: mesh_handle.clone(),
-                chunk_id: Some(chunk_id.to_string()),
-            });
-            Some(mesh_handle)
+    pub fn has_cached_mesh(&self, chunk_id: &str, lod: LodLevel) -> bool {
+        if let Some(lod_map) = self.cached_chunk_meshes.get(chunk_id) {
+            lod_map.contains_key(&lod)
         } else {
-            None
+            false
         }
     }
 
-    pub fn get_mesh(&mut self, entity: Entity, chunk_id: Option<&str>, meshes: &mut Assets<Mesh>) -> Handle<Mesh> {
-        if let Some(id) = chunk_id {
-            if let Some(mesh_handle) = self.cached_chunk_meshes.remove(id) {
+    pub fn get_cached_mesh(&mut self, entity: Entity, chunk_id: &str, lod: LodLevel) -> Option<Handle<Mesh>> {
+        if let Some(lod_map) = self.cached_chunk_meshes.get_mut(chunk_id) {
+            if let Some(mesh_handle) = lod_map.remove(&lod) {
                 self.active_meshes.insert(entity, MeshUsageInfo {
                     handle: mesh_handle.clone(),
-                    chunk_id: Some(id.to_string()),
+                    chunk_id: Some(chunk_id.to_string()),
+                    lod_level: Some(lod),
                 });
+                return Some(mesh_handle);
+            }
+        }
+        None
+    }
+
+    pub fn get_mesh(&mut self, entity: Entity, chunk_id: Option<&str>, lod: Option<LodLevel>, meshes: &mut Assets<Mesh>) -> Handle<Mesh> {
+        if let (Some(id), Some(lod_level)) = (chunk_id, lod) {
+            if let Some(mesh_handle) = self.get_cached_mesh(entity, id, lod_level) {
                 return mesh_handle;
             }
         }
@@ -98,6 +102,7 @@ impl MeshPool {
             self.active_meshes.insert(entity, MeshUsageInfo {
                 handle: mesh.clone(),
                 chunk_id: chunk_id.map(|id| id.to_string()),
+                lod_level: lod,
             });
             mesh
         } else {
@@ -105,6 +110,7 @@ impl MeshPool {
             self.active_meshes.insert(entity, MeshUsageInfo {
                 handle: mesh.clone(),
                 chunk_id: chunk_id.map(|id| id.to_string()),
+                lod_level: lod,
             });
             mesh
         }
@@ -114,9 +120,13 @@ impl MeshPool {
         if let Some(usage_info) = self.active_meshes.remove(&entity) {
             let mesh_handle = usage_info.handle;
 
-            if let Some(chunk_id) = usage_info.chunk_id {
+            if let (Some(chunk_id), Some(lod)) = (usage_info.chunk_id, usage_info.lod_level) {
                 if self.cached_chunk_meshes.len() < self.max_cached_chunks {
-                    self.cached_chunk_meshes.insert(chunk_id, mesh_handle);
+                    let lod_map = self.cached_chunk_meshes
+                        .entry(chunk_id)
+                        .or_insert_with(HashMap::new);
+
+                    lod_map.insert(lod, mesh_handle);
                     return;
                 }
             }
@@ -145,13 +155,14 @@ impl MeshPool {
         &mut self,
         entity: Entity,
         chunk_id: &str,
+        lod: LodLevel,
         mesh_data: &crate::core::map::generator::mesh_generator::TerrainMeshData,
         meshes: &mut Assets<Mesh>
     ) -> Handle<Mesh> {
         let mesh_handle = if let Some(usage_info) = self.active_meshes.get(&entity) {
             usage_info.handle.clone()
         } else {
-            self.get_mesh(entity, Some(chunk_id), meshes)
+            self.get_mesh(entity, Some(chunk_id), Some(lod), meshes)
         };
 
         if let Some(mesh) = meshes.get_mut(&mesh_handle) {
@@ -164,15 +175,41 @@ impl MeshPool {
         self.active_meshes.insert(entity, MeshUsageInfo {
             handle: mesh_handle.clone(),
             chunk_id: Some(chunk_id.to_string()),
+            lod_level: Some(lod),
         });
+
+        let lod_map = self.cached_chunk_meshes
+            .entry(chunk_id.to_string())
+            .or_insert_with(HashMap::new);
+
+        if !lod_map.contains_key(&lod) {
+            let cached_mesh = meshes.add(Mesh::new(
+                bevy::render::mesh::PrimitiveTopology::TriangleList,
+                bevy::asset::RenderAssetUsages::default()
+            ));
+
+            if let Some(mesh) = meshes.get_mut(&cached_mesh) {
+                mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, mesh_data.positions.clone());
+                mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, mesh_data.normals.clone());
+                mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, mesh_data.uvs.clone());
+                mesh.insert_indices(bevy::render::mesh::Indices::U32(mesh_data.indices.clone()));
+            }
+
+            lod_map.insert(lod, cached_mesh);
+
+            #[cfg(debug_assertions)]
+            println!("Меш чанка {} с LOD {:?} добавлен в кэш", chunk_id, lod);
+        }
 
         mesh_handle
     }
 
     pub fn stats(&self) -> (usize, usize, usize, usize) {
+        let total_cached = self.cached_chunk_meshes.values().map(|map| map.len()).sum::<usize>();
+
         (
             self.available_generic_meshes.len(),
-            self.cached_chunk_meshes.len(),
+            total_cached,
             self.active_meshes.len(),
             self.max_pool_size
         )

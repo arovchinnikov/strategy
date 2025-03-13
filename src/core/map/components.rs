@@ -1,4 +1,5 @@
 use bevy::prelude::Component;
+use crate::core::map::generator::cache::LodLevel;
 
 #[derive(Component)]
 pub(crate) struct WorldMap {
@@ -11,5 +12,7 @@ pub(crate) struct WorldMap {
 pub(crate) struct WorldChunk {
     pub id: String,
     pub loaded: bool,
-    pub generated: bool
+    pub generated: bool,
+    pub current_lod: Option<LodLevel>,
+    pub target_lod: Option<LodLevel>,
 }

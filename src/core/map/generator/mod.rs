@@ -1,5 +1,5 @@
 use crate::core::map::components::{WorldChunk, WorldMap};
-use crate::core::map::generator::cache::{terrain_mesh_cache, terrain_mesh_cache_dir};
+use crate::core::map::generator::cache::{terrain_mesh_cache, terrain_mesh_cache_dir, terrain_mesh_lod_dir, LodLevel};
 use crate::core::map::generator::mesh_generator::{generate_terrain_mesh, TerrainMeshData};
 use crate::pkg::dir::init_dir;
 use crate::pkg::str::generate_short_hash;
@@ -7,7 +7,7 @@ use bevy::asset::{Assets, Handle};
 use bevy::color::Color;
 use bevy::math::Vec3;
 use bevy::pbr::{MeshMaterial3d, StandardMaterial};
-use bevy::prelude::{default, App, BuildChildren, Commands, Component, Entity, GlobalTransform, Mesh3d, Res, ResMut, Startup, Transform, Visibility};
+use bevy::prelude::{default, App, BuildChildren, Commands, Entity, GlobalTransform, Mesh3d, Res, ResMut, Startup, Transform, Visibility};
 use bevy::render::view::RenderLayers;
 use image::{GrayImage, ImageReader};
 use std::fs::File;
@@ -19,14 +19,19 @@ use crate::core::async_tasks::{BackgroundTaskResult, BackgroundTaskSystem, Gener
 pub(crate) mod mesh_generator;
 pub(crate) mod mesh_loader;
 pub(crate) mod mesh_pool;
-mod cache;
+pub(crate) mod cache;
 
 pub fn build(app: &mut App) {
     app.add_systems(Startup, setup);
 }
 
-fn setup() {
-    init_dir(terrain_mesh_cache_dir()).expect("error to init terrain mesh cache directory");
+pub fn setup() {
+    init_dir(terrain_mesh_cache_dir()).expect("ошибка при создании основной директории кэша террейна");
+
+    for lod in LodLevel::all_levels() {
+        init_dir(terrain_mesh_lod_dir(lod))
+            .expect(&format!("ошибка при создании директории кэша для LOD {}", lod as usize));
+    }
 }
 
 pub fn generate_terrain(
@@ -37,7 +42,6 @@ pub fn generate_terrain(
     let width = 8192;
     let height = 4096;
     let chunk_size = 256;
-    let pixels_per_vertex = 1;
 
     let num_chunks_x = width / chunk_size;
     let num_chunks_z = height / chunk_size;
@@ -56,8 +60,6 @@ pub fn generate_terrain(
     )).id();
 
     let mut chunk_num_id = 0;
-    let subdivisions = chunk_size / pixels_per_vertex;
-
     let sender = task_system.sender.clone();
 
     for z in 0..num_chunks_z {
@@ -79,6 +81,8 @@ pub fn generate_terrain(
                     id: chunk_id.clone(),
                     loaded: false,
                     generated: false,
+                    current_lod: None,
+                    target_lod: None,
                 },
                 MeshMaterial3d::from(material_handle),
                 Transform {
@@ -91,7 +95,7 @@ pub fn generate_terrain(
 
             commands.entity(parent_entity).insert_children(chunk_num_id as usize, &[terrain_chunk]);
 
-            spawn_mesh_generation_task(
+            spawn_multi_lod_mesh_generation(
                 sender.clone(),
                 terrain_chunk,
                 chunk_id,
@@ -99,7 +103,6 @@ pub fn generate_terrain(
                 start_x as f32,
                 start_z as f32,
                 chunk_size as f32,
-                subdivisions,
             );
 
             chunk_num_id += 1;
@@ -107,7 +110,7 @@ pub fn generate_terrain(
     }
 }
 
-fn spawn_mesh_generation_task(
+fn spawn_multi_lod_mesh_generation(
     sender: crossbeam_channel::Sender<BackgroundTaskResult>,
     entity: Entity,
     chunk_id: String,
@@ -115,27 +118,27 @@ fn spawn_mesh_generation_task(
     start_x: f32,
     start_z: f32,
     chunk_size: f32,
-    subdivisions: u32,
 ) {
     thread::spawn(move || {
-        let terrain_mesh = generate_terrain_mesh(
-            start_x,
-            start_z,
-            chunk_size,
-            chunk_size,
-            subdivisions,
-            subdivisions,
-            &heightmap,
-        );
+        for lod in LodLevel::all_levels() {
+            let terrain_mesh = generate_terrain_mesh(
+                start_x,
+                start_z,
+                chunk_size,
+                chunk_size,
+                lod,
+                &heightmap,
+            );
 
-        let path = terrain_mesh_cache(chunk_id.as_str());
-        if let Err(e) = save_to_bin(&terrain_mesh, path) {
-            println!("Failed to save mesh to cache: {}", e);
+            let path = terrain_mesh_cache(chunk_id.as_str(), lod);
+            if let Err(e) = save_to_bin(&terrain_mesh, path) {
+                println!("Не удалось сохранить меш в кэш (LOD {}): {}", lod as usize, e);
+            }
         }
 
         let result = BackgroundTaskResult::ChunkGenerated(GeneratedChunkData {entity});
         if let Err(e) = sender.send(result) {
-            println!("Failed to send chunk generation result to main thread: {:?}", e);
+            println!("Не удалось отправить результат генерации чанка в основной поток: {:?}", e);
         }
     });
 }
