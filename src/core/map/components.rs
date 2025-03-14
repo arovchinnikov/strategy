@@ -1,5 +1,5 @@
 use bevy::prelude::Component;
-use crate::core::map::generator::cache::LodLevel;
+use crate::core::map::terrain::cache::LodLevel;
 
 #[derive(Component)]
 pub(crate) struct WorldMap {

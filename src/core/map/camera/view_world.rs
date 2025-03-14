@@ -1,9 +1,9 @@
 use crate::core::async_tasks::{BackgroundTaskResult, BackgroundTaskSystem, ChunkData};
 use crate::core::map::camera::{determine_lod_level, CameraCorners, CameraLodState};
 use crate::core::map::components::{WorldChunk, WorldMap};
-use crate::core::map::generator::cache::LodLevel;
-use crate::core::map::generator::mesh_loader::load_terrain_mesh;
-use crate::core::map::generator::mesh_pool::MeshPool;
+use crate::core::map::terrain::cache::LodLevel;
+use crate::core::map::terrain::mesh_loader::load_terrain_mesh;
+use crate::core::map::terrain::mesh_pool::MeshPool;
 use bevy::prelude::{Assets, Entity, Handle, Mesh, Mesh3d, Query, Res, ResMut, Resource, Transform};
 use bevy::render::view::RenderLayers;
 use bevy::tasks::AsyncComputeTaskPool;

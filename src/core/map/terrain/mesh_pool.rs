@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::utils::hashbrown::HashMap;
 use std::collections::VecDeque;
-use crate::core::map::generator::cache::LodLevel;
+use crate::core::map::terrain::cache::LodLevel;
 
 #[derive(Resource)]
 pub struct MeshPool {
@@ -156,7 +156,7 @@ impl MeshPool {
         entity: Entity,
         chunk_id: &str,
         lod: LodLevel,
-        mesh_data: &crate::core::map::generator::mesh_generator::TerrainMeshData,
+        mesh_data: &crate::core::map::terrain::mesh_generator::TerrainMeshData,
         meshes: &mut Assets<Mesh>
     ) -> Handle<Mesh> {
         let mesh_handle = if let Some(usage_info) = self.active_meshes.get(&entity) {

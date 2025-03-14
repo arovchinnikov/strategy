@@ -11,7 +11,7 @@ pub struct TerrainMeshData {
     pub indices: Vec<u32>,
 }
 
-use crate::core::map::generator::cache::LodLevel;
+use crate::core::map::terrain::cache::LodLevel;
 
 pub fn generate_terrain_mesh(
     start_x: f32,

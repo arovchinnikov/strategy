@@ -1,9 +1,10 @@
-mod chunk_lazy_load;
+mod handler;
+mod chunk_loading;
 
 use bevy::prelude::*;
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use crate::core::async_tasks::chunk_lazy_load::handle_background_tasks;
-use crate::core::map::generator::cache::LodLevel;
+use crate::core::async_tasks::handler::handle_background_tasks;
+use crate::core::map::terrain::cache::LodLevel;
 
 pub enum BackgroundTaskResult {
     ChunkLoaded(ChunkData),

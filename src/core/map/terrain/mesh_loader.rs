@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::Mesh;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
-use crate::core::map::generator::cache::{terrain_mesh_cache, LodLevel};
-use crate::core::map::generator::mesh_generator::TerrainMeshData;
+use crate::core::map::terrain::cache::{terrain_mesh_cache, LodLevel};
+use crate::core::map::terrain::mesh_generator::TerrainMeshData;
 
 pub fn load_terrain_mesh(chunk_id: &str, lod: LodLevel) -> Mesh {
     let mesh_data = load_from_file(terrain_mesh_cache(chunk_id, lod)).unwrap();

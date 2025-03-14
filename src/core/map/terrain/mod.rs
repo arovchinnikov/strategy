@@ -1,6 +1,6 @@
 use crate::core::map::components::{WorldChunk, WorldMap};
-use crate::core::map::generator::cache::{terrain_mesh_cache, terrain_mesh_cache_dir, terrain_mesh_lod_dir, LodLevel};
-use crate::core::map::generator::mesh_generator::{generate_terrain_mesh, TerrainMeshData};
+use crate::core::map::terrain::cache::{terrain_mesh_cache, terrain_mesh_cache_dir, terrain_mesh_lod_dir, LodLevel};
+use crate::core::map::terrain::mesh_generator::{generate_terrain_mesh, TerrainMeshData};
 use crate::pkg::dir::init_dir;
 use crate::pkg::str::generate_short_hash;
 use bevy::asset::{Assets, Handle};

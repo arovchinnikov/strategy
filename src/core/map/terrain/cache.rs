@@ -1,12 +1,11 @@
 use std::path::PathBuf;
 use crate::pkg::dir::cache_directory;
 
-// Определение уровней LOD
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum LodLevel {
-    High = 0,   // Высокая детализация (LOD 0)
-    Medium = 1, // Средняя детализация (LOD 1)
-    Low = 2     // Низкая детализация (LOD 2)
+    High = 0,
+    Medium = 1,
+    Low = 2
 }
 
 impl LodLevel {

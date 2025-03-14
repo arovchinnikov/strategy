@@ -6,7 +6,7 @@ use crate::core::map::camera::zoom::zoom_handler;
 use bevy::app::{Startup, Update};
 use bevy::math::Vec3;
 use bevy::prelude::{ButtonInput, Camera, Camera3d, Commands, Component, FixedUpdate, GlobalTransform, KeyCode, MouseButton, Query, Ray3d, Res, ResMut, Resource, Time, Transform, Vec2, Window};
-use crate::core::map::generator::cache::LodLevel;
+use crate::core::map::terrain::cache::LodLevel;
 
 const MAP_MIN_X: f32 = -256.0;
 const MAP_MAX_X: f32 = 8192.0 + 256.0;
